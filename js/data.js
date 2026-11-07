@@ -117,32 +117,77 @@ class DataStore {
         }
     }
 
+    normalizeData(d) {
+        if (!d || typeof d !== 'object') {
+            return JSON.parse(JSON.stringify(DEFAULT_LEAGUE_DATA));
+        }
+        if (!d.settings || typeof d.settings !== 'object') {
+            d.settings = JSON.parse(JSON.stringify(DEFAULT_LEAGUE_DATA.settings));
+        }
+        d.teams = Array.isArray(d.teams) ? d.teams : (d.teams ? Object.values(d.teams) : JSON.parse(JSON.stringify(DEFAULT_LEAGUE_DATA.teams)));
+        d.players = Array.isArray(d.players) ? d.players : (d.players ? Object.values(d.players) : JSON.parse(JSON.stringify(DEFAULT_LEAGUE_DATA.players)));
+
+        // 若雲端或舊快取仍為舊版範例隊名（金獅隊/猛虎隊），自動升級為正式「紅隊、藍隊、白隊」42人名單
+        if (d.teams[0] && (d.teams[0].name === '中正金獅隊' || d.teams[0].name === '猛虎隊')) {
+            d.teams = JSON.parse(JSON.stringify(DEFAULT_LEAGUE_DATA.teams));
+            d.players = JSON.parse(JSON.stringify(DEFAULT_LEAGUE_DATA.players));
+            d.games = [];
+            d.trades = [];
+        }
+
+        d.games = Array.isArray(d.games) ? d.games : (d.games ? Object.values(d.games) : []);
+        d.trades = Array.isArray(d.trades) ? d.trades : (d.trades ? Object.values(d.trades) : []);
+
+        d.games.forEach(g => {
+            if (!g || typeof g !== 'object') return;
+            g.battingStats = Array.isArray(g.battingStats) ? g.battingStats : (g.battingStats ? Object.values(g.battingStats) : []);
+            g.pitchingStats = Array.isArray(g.pitchingStats) ? g.pitchingStats : (g.pitchingStats ? Object.values(g.pitchingStats) : []);
+            g.playByPlay = Array.isArray(g.playByPlay) ? g.playByPlay : (g.playByPlay ? Object.values(g.playByPlay) : []);
+            if (!g.lineScore || typeof g.lineScore !== 'object') {
+                g.lineScore = { away: [Number(g.awayScore) || 0], home: [Number(g.homeScore) || 0] };
+            } else {
+                g.lineScore.away = Array.isArray(g.lineScore.away) ? g.lineScore.away : (g.lineScore.away ? Object.values(g.lineScore.away) : [Number(g.awayScore) || 0]);
+                g.lineScore.home = Array.isArray(g.lineScore.home) ? g.lineScore.home : (g.lineScore.home ? Object.values(g.lineScore.home) : [Number(g.homeScore) || 0]);
+            }
+        });
+
+        d.trades.forEach(tr => {
+            if (!tr || typeof tr !== 'object') return;
+            tr.fromPlayers = Array.isArray(tr.fromPlayers) ? tr.fromPlayers : (tr.fromPlayers ? Object.values(tr.fromPlayers) : []);
+            tr.toPlayers = Array.isArray(tr.toPlayers) ? tr.toPlayers : (tr.toPlayers ? Object.values(tr.toPlayers) : []);
+        });
+
+        return d;
+    }
+
     load() {
         try {
             const raw = localStorage.getItem(STORAGE_KEY);
             if (raw) {
                 const parsed = JSON.parse(raw);
-                if (parsed && Array.isArray(parsed.teams) && Array.isArray(parsed.players)) {
-                    return parsed;
+                if (parsed && (parsed.teams || parsed.players)) {
+                    return this.normalizeData(parsed);
                 }
             }
         } catch (e) {
             console.warn('讀取 LocalStorage 失敗，使用預設三隊聯盟資料', e);
         }
-        const clone = JSON.parse(JSON.stringify(DEFAULT_LEAGUE_DATA));
+        const clone = this.normalizeData(JSON.parse(JSON.stringify(DEFAULT_LEAGUE_DATA)));
         this.saveLocal(clone);
         return clone;
     }
 
     saveLocal(dataObj = this.data) {
         try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(dataObj));
+            this.data = this.normalizeData(dataObj);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
         } catch (e) {
             console.error('儲存 LocalStorage 失敗', e);
         }
     }
 
     async save() {
+        this.data = this.normalizeData(this.data);
         this.data._updatedAt = Date.now();
         this.lastCloudTimestamp = this.data._updatedAt;
         this.saveLocal(this.data);
@@ -182,11 +227,15 @@ class DataStore {
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const cloudData = await res.json();
 
-            if (cloudData && Array.isArray(cloudData.teams) && Array.isArray(cloudData.players)) {
-                this.data = cloudData;
+            if (cloudData && (cloudData.teams || cloudData.players)) {
+                const wasOldTeam = cloudData.teams && cloudData.teams[0] && (cloudData.teams[0].name === '中正金獅隊' || cloudData.teams[0].name === '猛虎隊');
+                this.data = this.normalizeData(cloudData);
                 this.lastCloudTimestamp = cloudData._updatedAt || Date.now();
                 this.saveLocal(this.data);
                 this.firebaseConnected = true;
+                if (wasOldTeam) {
+                    await this.save();
+                }
             } else {
                 // 雲端尚無資料，自動將目前本地的三隊資料上傳初始化至 Firebase！
                 await this.save();
@@ -218,7 +267,7 @@ class DataStore {
 
                 if (root.league_data && root.league_data._updatedAt && root.league_data._updatedAt > this.lastCloudTimestamp) {
                     this.lastCloudTimestamp = root.league_data._updatedAt;
-                    this.data = root.league_data;
+                    this.data = this.normalizeData(root.league_data);
                     this.saveLocal(this.data);
                     if (window.app) window.app.refreshAll();
                 }
@@ -228,7 +277,7 @@ class DataStore {
                     const cloudLiveTs = root.live_game ? (root.live_game._updatedAt || 0) : 0;
                     if (cloudLiveTs > (window.scorebook.lastLiveTimestamp || 0)) {
                         window.scorebook.lastLiveTimestamp = cloudLiveTs;
-                        window.scorebook.state = cloudLive;
+                        window.scorebook.state = cloudLive ? window.scorebook.normalizeState(cloudLive) : null;
                         window.scorebook.saveLiveState(false);
                         if (window.app) window.app.refreshAll();
                     }
@@ -244,8 +293,8 @@ class DataStore {
             if (res.ok) {
                 this.serverAvailable = true;
                 const serverData = await res.json();
-                if (serverData && Array.isArray(serverData.teams) && Array.isArray(serverData.players)) {
-                    this.data = serverData;
+                if (serverData && (serverData.teams || serverData.players)) {
+                    this.data = this.normalizeData(serverData);
                     this.saveLocal(this.data);
                     if (window.app) window.app.refreshAll();
                 } else {
@@ -266,11 +315,11 @@ class DataStore {
                 try {
                     const msg = JSON.parse(event.data);
                     if (msg.type === 'data_updated' && msg.data) {
-                        this.data = msg.data;
+                        this.data = this.normalizeData(msg.data);
                         this.saveLocal(this.data);
                         if (window.app) window.app.refreshAll();
                     } else if (msg.type === 'live_updated' && window.scorebook) {
-                        window.scorebook.state = msg.liveState;
+                        window.scorebook.state = msg.liveState ? window.scorebook.normalizeState(msg.liveState) : null;
                         window.scorebook.saveLiveState(false);
                         if (window.app) window.app.refreshAll();
                     }

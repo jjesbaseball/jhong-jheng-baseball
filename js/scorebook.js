@@ -13,12 +13,37 @@ class LiveScorebook {
         this.historyStack = [];
     }
 
+    normalizeState(st) {
+        if (!st || typeof st !== 'object') return null;
+        if (!st.bases || typeof st.bases !== 'object') {
+            st.bases = { first: null, second: null, third: null };
+        } else {
+            if (st.bases.first === undefined) st.bases.first = null;
+            if (st.bases.second === undefined) st.bases.second = null;
+            if (st.bases.third === undefined) st.bases.third = null;
+        }
+        st.awayLineup = Array.isArray(st.awayLineup) ? st.awayLineup : Object.values(st.awayLineup || {});
+        st.homeLineup = Array.isArray(st.homeLineup) ? st.homeLineup : Object.values(st.homeLineup || {});
+        st.pitcherOrder = Array.isArray(st.pitcherOrder) ? st.pitcherOrder : Object.values(st.pitcherOrder || {});
+        st.battingStats = (st.battingStats && typeof st.battingStats === 'object') ? st.battingStats : {};
+        st.pitchingStats = (st.pitchingStats && typeof st.pitchingStats === 'object') ? st.pitchingStats : {};
+        st.playByPlay = Array.isArray(st.playByPlay) ? st.playByPlay : Object.values(st.playByPlay || {});
+        const maxInn = Number(st.maxInnings) || 4;
+        if (!st.lineScore || typeof st.lineScore !== 'object') {
+            st.lineScore = { away: Array(maxInn).fill(0), home: Array(maxInn).fill(0) };
+        } else {
+            st.lineScore.away = Array.isArray(st.lineScore.away) ? st.lineScore.away : Object.values(st.lineScore.away || [0]);
+            st.lineScore.home = Array.isArray(st.lineScore.home) ? st.lineScore.home : Object.values(st.lineScore.home || [0]);
+        }
+        return st;
+    }
+
     loadLiveState() {
         try {
-            const raw = localStorage.getItem(LIVE_GAME_STORAGE_KEY);
+            const raw = localStorage.getItem(LIVE_GAME_STORAGE_KEY) || localStorage.getItem('YOUTH_BASEBALL_JJ_LIVE_V3');
             if (raw) {
                 const parsed = JSON.parse(raw);
-                if (parsed && parsed.awayTeamId && parsed.homeTeamId) return parsed;
+                if (parsed && parsed.awayTeamId && parsed.homeTeamId) return this.normalizeState(parsed);
             }
         } catch (e) {}
         return null;
@@ -171,6 +196,7 @@ class LiveScorebook {
     }
 
     ensureBatterLine(playerId, teamId) {
+        if (!this.state.battingStats) this.state.battingStats = {};
         if (!this.state.battingStats[playerId]) {
             const p = window.store.getPlayer(playerId);
             this.state.battingStats[playerId] = this.createEmptyBatterLine(playerId, teamId || (p ? p.teamId : ''));
@@ -179,6 +205,8 @@ class LiveScorebook {
     }
 
     ensurePitcherLine(playerId, teamId) {
+        if (!this.state.pitchingStats) this.state.pitchingStats = {};
+        if (!Array.isArray(this.state.pitcherOrder)) this.state.pitcherOrder = [];
         if (!this.state.pitchingStats[playerId]) {
             const p = window.store.getPlayer(playerId);
             this.state.pitchingStats[playerId] = this.createEmptyPitcherLine(playerId, teamId || (p ? p.teamId : ''), 0);
@@ -615,48 +643,71 @@ class LiveScorebook {
         this.saveLiveState();
     }
 
-    finalizeGame(decisions = {}) {
-        if (!this.state) return null;
+    finalizeGame(decisions = {}, fallbackState = null) {
+        const rawSt = this.state || fallbackState;
+        if (!rawSt) return null;
+        const st = this.normalizeState(rawSt);
 
-        const batArray = Object.values(this.state.battingStats).filter(b =>
-            b.pa > 0 || b.r > 0 || b.sb > 0 || b.cs > 0
+        const battingStatsObj = st.battingStats || {};
+        const pitchingStatsObj = st.pitchingStats || {};
+        const pitcherOrderArr = Array.isArray(st.pitcherOrder) ? st.pitcherOrder : [];
+
+        const batArray = Object.values(battingStatsObj).filter(b =>
+            b && (b.pa > 0 || b.ab > 0 || b.h > 0 || b.r > 0 || b.rbi > 0 || b.bb > 0 || b.sb > 0 || b.cs > 0)
         );
-        const pitArray = this.state.pitcherOrder.map(pid => {
-            const line = this.state.pitchingStats[pid];
-            if (line && decisions[pid]) {
+
+        const allPitcherIds = Array.from(new Set([...pitcherOrderArr, ...Object.keys(pitchingStatsObj)]));
+        const pitArray = allPitcherIds.map(pid => {
+            const line = pitchingStatsObj[pid];
+            if (!line) return null;
+            if (decisions[pid] !== undefined) {
                 line.decision = decisions[pid];
             }
             return line;
         }).filter(Boolean);
 
+        const maxInn = Number(st.maxInnings) || 4;
+        const curInn = Number(st.inning) || 1;
+        const awayLines = Array.isArray(st.lineScore?.away) ? st.lineScore.away : [Number(st.awayScore) || 0];
+        const homeLines = Array.isArray(st.lineScore?.home) ? st.lineScore.home : [Number(st.homeScore) || 0];
+
         const finishedGame = {
-            id: this.state.id,
-            date: this.state.date,
-            tournament: this.state.tournament,
-            awayTeamId: this.state.awayTeamId,
-            homeTeamId: this.state.homeTeamId,
-            sameTeamPitcher: this.state.sameTeamPitcher !== false,
-            awayScore: this.state.awayScore,
-            homeScore: this.state.homeScore,
-            awayHits: this.state.awayHits,
-            homeHits: this.state.homeHits,
-            awayErrors: this.state.awayErrors,
-            homeErrors: this.state.homeErrors,
-            innings: Math.min(this.state.inning, this.state.maxInnings || 4),
+            id: st.id || ('g_' + Date.now()),
+            date: st.date || new Date().toISOString().slice(0, 10),
+            tournament: st.tournament || '隊內三隊爭霸練習賽 (4局制)',
+            awayTeamId: st.awayTeamId,
+            homeTeamId: st.homeTeamId,
+            sameTeamPitcher: st.sameTeamPitcher !== false,
+            awayScore: Number(st.awayScore) || 0,
+            homeScore: Number(st.homeScore) || 0,
+            awayHits: Number(st.awayHits) || 0,
+            homeHits: Number(st.homeHits) || 0,
+            awayErrors: Number(st.awayErrors) || 0,
+            homeErrors: Number(st.homeErrors) || 0,
+            innings: Math.min(curInn, maxInn),
             lineScore: {
-                away: this.state.lineScore.away.slice(0, Math.max(this.state.maxInnings || 4, this.state.inning)),
-                home: this.state.lineScore.home.slice(0, Math.max(this.state.maxInnings || 4, this.state.inning))
+                away: awayLines.slice(0, Math.max(maxInn, curInn)),
+                home: homeLines.slice(0, Math.max(maxInn, curInn))
             },
             battingStats: batArray,
             pitchingStats: pitArray,
-            playByPlay: this.state.playByPlay.slice().reverse()
+            playByPlay: Array.isArray(st.playByPlay) ? st.playByPlay.slice().reverse() : []
         };
 
+        if (!window.store.data) window.store.data = {};
+        if (!Array.isArray(window.store.data.games)) {
+            window.store.data.games = window.store.data.games ? Object.values(window.store.data.games) : [];
+        }
         window.store.data.games.unshift(finishedGame);
-        window.store.save();
 
         this.state = null;
         this.historyStack = [];
+        try {
+            localStorage.removeItem('YOUTH_BASEBALL_JJ_LIVE_V3');
+            localStorage.removeItem('YOUTH_BASEBALL_JJ_LIVE_V5');
+        } catch (e) {}
+
+        window.store.save();
         this.saveLiveState();
         return finishedGame;
     }

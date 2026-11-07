@@ -1065,8 +1065,17 @@ class BaseballApp {
     }
 
     openFinalizeGameModal() {
-        const st = window.scorebook.state;
-        if (!st) return;
+        const rawSt = window.scorebook.state;
+        if (!rawSt) {
+            alert('目前沒有正在進行中的比賽可結算！');
+            return;
+        }
+        const st = window.scorebook.normalizeState ? window.scorebook.normalizeState(rawSt) : rawSt;
+        this._pendingFinalizeState = JSON.parse(JSON.stringify(st));
+        try {
+            localStorage.setItem('JJ_PENDING_FINALIZE_BACKUP', JSON.stringify(st));
+        } catch (e) {}
+
         const awayTeam = window.store.getTeam(st.awayTeamId);
         const homeTeam = window.store.getTeam(st.homeTeamId);
         const modal = document.getElementById('runner-action-modal');
@@ -1074,20 +1083,33 @@ class BaseballApp {
         const body = document.getElementById('runner-modal-body');
 
         title.textContent = '🏁 結束比賽並結算兩隊成績入庫';
-        const pitcherRows = st.pitcherOrder.map(pid => {
+        const allPitcherIds = Array.from(new Set([
+            ...(Array.isArray(st.pitcherOrder) ? st.pitcherOrder : []),
+            ...Object.keys(st.pitchingStats || {})
+        ]));
+
+        const pitcherRows = allPitcherIds.map(pid => {
             const p = window.store.getPlayer(pid) || { name: '投手', number: '' };
-            const pl = st.pitchingStats[pid];
+            const pl = (st.pitchingStats || {})[pid];
             if (!pl) return '';
             const tm = window.store.getTeam(pl.teamId);
+            // 預設自動預選勝投/敗投方便教練一鍵確認
+            let defaultDec = pl.decision || '';
+            if (!defaultDec && st.awayScore !== st.homeScore) {
+                const winTeamId = st.awayScore > st.homeScore ? st.awayTeamId : st.homeTeamId;
+                const loseTeamId = st.awayScore > st.homeScore ? st.homeTeamId : st.awayTeamId;
+                if (pl.teamId === winTeamId && pl.gs) defaultDec = 'W';
+                else if (pl.teamId === loseTeamId && pl.gs) defaultDec = 'L';
+            }
             return `
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border-color);">
                     <span>${tm.emoji} <strong>#${p.number} ${p.name}</strong> (${StatsEngine.formatIP(pl.outs)}局, 失${pl.r}分, ${pl.so}K)</span>
                     <select class="form-control pitcher-decision-select" data-pid="${pid}" style="width:155px;">
-                        <option value="">無勝敗/中繼</option>
-                        <option value="W">勝投 (W)</option>
-                        <option value="L">敗投 (L)</option>
-                        <option value="SV">救援成功 (SV)</option>
-                        <option value="HLD">中繼成功 (HLD)</option>
+                        <option value="" ${defaultDec === '' ? 'selected' : ''}>無勝敗/中繼</option>
+                        <option value="W" ${defaultDec === 'W' ? 'selected' : ''}>勝投 (W)</option>
+                        <option value="L" ${defaultDec === 'L' ? 'selected' : ''}>敗投 (L)</option>
+                        <option value="SV" ${defaultDec === 'SV' ? 'selected' : ''}>救援成功 (SV)</option>
+                        <option value="HLD" ${defaultDec === 'HLD' ? 'selected' : ''}>中繼成功 (HLD)</option>
                     </select>
                 </div>
             `;
@@ -1105,23 +1127,46 @@ class BaseballApp {
                 ${pitcherRows || '<p style="font-size:0.85rem;color:var(--text-secondary);">無投手紀錄</p>'}
             </div>
             <div style="display:flex;justify-content:flex-end;gap:10px;">
-                <button class="btn" onclick="app.closeModal('runner-action-modal')">繼續記錄比賽</button>
-                <button class="btn btn-primary" onclick="app.confirmFinalizeGame()">✅ 確認結算並更新三隊戰績與排行榜</button>
+                <button type="button" class="btn" onclick="app.closeModal('runner-action-modal')">繼續記錄比賽</button>
+                <button type="button" class="btn btn-primary" onclick="app.confirmFinalizeGame()">✅ 確認結算並更新三隊戰績與排行榜</button>
             </div>
         `;
         modal.classList.add('open');
     }
 
     confirmFinalizeGame() {
-        const decisions = {};
-        document.querySelectorAll('.pitcher-decision-select').forEach(sel => {
-            const pid = sel.getAttribute('data-pid');
-            if (pid && sel.value) decisions[pid] = sel.value;
-        });
+        try {
+            const decisions = {};
+            document.querySelectorAll('.pitcher-decision-select').forEach(sel => {
+                const pid = sel.getAttribute('data-pid');
+                if (pid && sel.value) decisions[pid] = sel.value;
+            });
 
-        window.scorebook.finalizeGame(decisions);
-        this.closeModal('runner-action-modal');
-        this.switchTab('toplist');
+            let backupState = this._pendingFinalizeState || null;
+            if (!backupState) {
+                try {
+                    const rawBackup = localStorage.getItem('JJ_PENDING_FINALIZE_BACKUP') || localStorage.getItem('YOUTH_BASEBALL_JJ_LIVE_V5') || localStorage.getItem('YOUTH_BASEBALL_JJ_LIVE_V3');
+                    if (rawBackup) backupState = JSON.parse(rawBackup);
+                } catch (e) {}
+            }
+
+            const finished = window.scorebook.finalizeGame(decisions, backupState);
+            this._pendingFinalizeState = null;
+            try { localStorage.removeItem('JJ_PENDING_FINALIZE_BACKUP'); } catch (e) {}
+
+            this.closeModal('runner-action-modal');
+            this.switchTab('toplist');
+            this.refreshAll();
+
+            if (finished) {
+                const awayT = window.store.getTeam(finished.awayTeamId);
+                const homeT = window.store.getTeam(finished.homeTeamId);
+                alert(`🎉 比賽結算完成！\n【${awayT.name} ${finished.awayScore} : ${finished.homeScore} ${homeT.name}】\n已自動更新三隊戰績榜與個人數據排行榜！`);
+            }
+        } catch (err) {
+            console.error('結算比賽時發生錯誤:', err);
+            alert('結算比賽時發生問題：' + err.message);
+        }
     }
 
     cancelLiveGame() {
