@@ -1,0 +1,18 @@
+{
+  "name": "中正國小少棒隊｜三隊聯賽紀錄與數據排行系統",
+  "short_name": "中正少棒紀錄",
+  "description": "JHONG JHENG ELEMENTARY SCHOOL 中正國小少棒隊三隊爭霸賽・CPBL 數據排行・實戰計分本・球員交易系統",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#081b31",
+  "theme_color": "#10345c",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "assets/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
