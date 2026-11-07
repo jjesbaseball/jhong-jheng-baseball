@@ -12,10 +12,14 @@ class BaseballApp {
         this.batSort = { key: 'avg', dir: 'desc' };
         this.pitSort = { key: 'era', dir: 'asc' };
         this.selectedBaseKey = null;
+        this.voiceEnabled = localStorage.getItem('JJ_VOICE_ANNOUNCE') !== 'off';
+        this._hrAnimId = null;
+        this._hrHideTimer = null;
     }
 
     init() {
         this.bindNavigation();
+        this.updateVoiceToggleUI();
         this.refreshAll();
     }
 
@@ -779,18 +783,224 @@ class BaseballApp {
         }
     }
 
+    toggleVoiceAnnounce() {
+        this.voiceEnabled = !this.voiceEnabled;
+        try {
+            localStorage.setItem('JJ_VOICE_ANNOUNCE', this.voiceEnabled ? 'on' : 'off');
+        } catch (e) {}
+        this.updateVoiceToggleUI();
+        if (this.voiceEnabled) {
+            this.speakActionText('語音播報已開啟');
+        } else if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+        }
+    }
+
+    updateVoiceToggleUI() {
+        const btn = document.getElementById('btn-toggle-voice');
+        if (btn) {
+            btn.textContent = this.voiceEnabled ? '🔊 語音播報：開' : '🔇 語音播報：關';
+            btn.style.borderColor = this.voiceEnabled ? 'var(--jj-gold)' : 'var(--border-color)';
+        }
+    }
+
+    speakActionText(text) {
+        const toast = document.getElementById('voice-action-toast');
+        if (toast) {
+            toast.innerHTML = `🔊 已按下：<span style="color:#fff;">【${text}】</span>`;
+            toast.classList.add('speaking');
+            clearTimeout(this._toastTimer);
+            this._toastTimer = setTimeout(() => toast.classList.remove('speaking'), 950);
+        }
+
+        if (!this.voiceEnabled || !('speechSynthesis' in window)) return;
+        try {
+            window.speechSynthesis.cancel();
+            const utter = new SpeechSynthesisUtterance(text);
+            utter.lang = 'zh-TW';
+            utter.rate = 1.15;
+            utter.pitch = 1.05;
+            utter.volume = 1.0;
+            window.speechSynthesis.speak(utter);
+        } catch (e) {}
+    }
+
+    playHomeRunFanfare() {
+        if (!this.voiceEnabled) return;
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return;
+            const ctx = new AudioCtx();
+            const notes = [
+                { f: 523.25, t: 0.0, d: 0.14 },  // C5
+                { f: 659.25, t: 0.15, d: 0.14 }, // E5
+                { f: 783.99, t: 0.30, d: 0.14 }, // G5
+                { f: 1046.50, t: 0.46, d: 0.55 } // C6
+            ];
+            notes.forEach(n => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(n.f, ctx.currentTime + n.t);
+                gain.gain.setValueAtTime(0.001, ctx.currentTime + n.t);
+                gain.gain.exponentialRampToValueAtTime(0.24, ctx.currentTime + n.t + 0.03);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + n.t + n.d);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(ctx.currentTime + n.t);
+                osc.stop(ctx.currentTime + n.t + n.d + 0.02);
+            });
+        } catch (e) {}
+    }
+
+    triggerHomeRunJumbotron(batterBannerText) {
+        const overlay = document.getElementById('hr-jumbotron-overlay');
+        const banner = document.getElementById('hr-batter-banner');
+        const canvas = document.getElementById('hr-fireworks-canvas');
+        if (!overlay || !canvas) return;
+
+        if (banner) {
+            banner.textContent = batterBannerText || '🔥 轟出全壘打！';
+        }
+
+        overlay.classList.add('active');
+        this.playHomeRunFanfare();
+
+        const rect = overlay.getBoundingClientRect();
+        canvas.width = Math.max(280, rect.width || 360);
+        canvas.height = Math.max(240, rect.height || 295);
+        const ctx = canvas.getContext('2d');
+
+        const colors = ['#facc15', '#ef4444', '#38bdf8', '#34d399', '#f472b6', '#ffffff', '#fb923c'];
+        const particles = [];
+
+        const spawnBurst = (cx, cy) => {
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            const count = 36;
+            for (let i = 0; i < count; i++) {
+                const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.2;
+                const speed = 1.6 + Math.random() * 3.8;
+                particles.push({
+                    x: cx,
+                    y: cy,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed - 0.6,
+                    alpha: 1,
+                    size: 2.2 + Math.random() * 2.2,
+                    color
+                });
+            }
+        };
+
+        // 初始連發煙火
+        spawnBurst(canvas.width * 0.25, canvas.height * 0.32);
+        spawnBurst(canvas.width * 0.75, canvas.height * 0.28);
+        spawnBurst(canvas.width * 0.50, canvas.height * 0.22);
+
+        let frame = 0;
+        if (this._hrAnimId) cancelAnimationFrame(this._hrAnimId);
+
+        const animate = () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            frame++;
+            if (frame % 18 === 0) {
+                const rx = canvas.width * (0.15 + Math.random() * 0.7);
+                const ry = canvas.height * (0.15 + Math.random() * 0.55);
+                spawnBurst(rx, ry);
+            }
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.055; // 重力下墜
+                p.alpha -= 0.018;
+
+                if (p.alpha <= 0) {
+                    particles.splice(i, 1);
+                    continue;
+                }
+
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, p.alpha);
+                ctx.fillStyle = p.color;
+                ctx.shadowColor = p.color;
+                ctx.shadowBlur = 8;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            this._hrAnimId = requestAnimationFrame(animate);
+        };
+
+        this._hrAnimId = requestAnimationFrame(animate);
+
+        clearTimeout(this._hrHideTimer);
+        this._hrHideTimer = setTimeout(() => {
+            this.hideHomeRunJumbotron();
+        }, 4200);
+    }
+
+    hideHomeRunJumbotron() {
+        const overlay = document.getElementById('hr-jumbotron-overlay');
+        if (overlay) overlay.classList.remove('active');
+        if (this._hrAnimId) {
+            cancelAnimationFrame(this._hrAnimId);
+            this._hrAnimId = null;
+        }
+        clearTimeout(this._hrHideTimer);
+    }
+
     handlePitchBtn(type) {
+        const pitchLabels = {
+            'strike_looking': '好球進壘',
+            'strike_swinging': '揮棒落空',
+            'foul': '界外球',
+            'ball': '壞球'
+        };
+        this.speakActionText(pitchLabels[type] || '投球紀錄');
         window.scorebook.recordPitch(type);
         this.renderScorebookView();
     }
 
     handlePlayBtn(type) {
+        const playLabels = {
+            '1B': '一壘安打',
+            '2B': '二壘安打',
+            '3B': '三壘安打',
+            'HR': '全壘打！Home Run',
+            'BB': '四壞保送',
+            'HBP': '觸身球',
+            'SO': '三振出局',
+            'GO': '滾地出局',
+            'FO': '飛球出局',
+            'DP': '雙殺守備',
+            'SAC': '犧牲觸擊',
+            'SF': '高飛犧牲打',
+            'ROE': '守備失誤上壘'
+        };
+
+        // 先擷取目前打者資訊供全壘打電視牆顯示
+        const { battingTeam } = window.scorebook.getActiveTeams();
+        const { batter } = window.scorebook.getCurrentMatchup();
+        const batterBannerText = batter
+            ? `${battingTeam ? battingTeam.emoji + battingTeam.name : ''} #${batter.number} ${batter.name} 轟出全壘打！`
+            : '🔥 轟出全壘打！';
+
+        this.speakActionText(playLabels[type] || type);
         window.scorebook.recordPlay({ type });
         this.renderScorebookView();
+
+        if (type === 'HR') {
+            this.triggerHomeRunJumbotron(batterBannerText);
+        }
     }
 
     handleUndo() {
         if (window.scorebook.undo()) {
+            this.speakActionText('復原上一步');
             this.renderScorebookView();
         } else {
             alert('目前已是最初步驟，無可復原紀錄。');
@@ -851,6 +1061,14 @@ class BaseballApp {
 
     execRunnerAction(action) {
         if (!this.selectedBaseKey) return;
+        const runnerLabels = {
+            'SB': '盜壘成功',
+            'CS': '盜壘失敗出局',
+            'WP': '暴投推進',
+            'SCORE': '跑回本壘得分',
+            'REMOVE': '移除跑者'
+        };
+        if (runnerLabels[action]) this.speakActionText(runnerLabels[action]);
         window.scorebook.handleRunnerAction(this.selectedBaseKey, action);
         this.closeModal('runner-action-modal');
         this.renderScorebookView();

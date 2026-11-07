@@ -218,9 +218,9 @@
                     </div>
                 </div>
 
-                <div class="scorebook-layout">
-                    <div>
-                        <div class="diamond-card">
+                <div class="scorebook-layout live-scorebook-grid">
+                    <div class="live-left-col">
+                        <div class="diamond-card" id="live-diamond-card">
                             <div class="diamond-mode-banner">
                                 <span id="live-attack-defense-tag" class="attack-defense-tag batting">🔥 對戰進行中</span>
                                 <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="window.scorebook.switchHalfInning(true); app.renderScorebookView();">
@@ -244,12 +244,24 @@
                                 </div>
                                 <div class="home-plate-indicator">⚾ 本壘 Home (點壘包可記盜壘/暴投推進)</div>
                             </div>
+
+                            <!-- 🏟️ 球場大螢幕電視牆全壘打煙火特效 (HOME RUN Jumbotron Overlay) -->
+                            <div id="hr-jumbotron-overlay" class="hr-jumbotron-overlay" onclick="app.hideHomeRunJumbotron()">
+                                <canvas id="hr-fireworks-canvas" class="hr-fireworks-canvas"></canvas>
+                                <div class="hr-jumbotron-content">
+                                    <div class="hr-stadium-lights"></div>
+                                    <div class="hr-flying-ball">⚾</div>
+                                    <div class="hr-main-title" data-text="HOME RUN!">HOME RUN!</div>
+                                    <div id="hr-batter-banner" class="hr-batter-banner">🔥 全壘打！</div>
+                                    <div class="hr-sub-hint">🎆 JHONG JHENG STADIUM JUMBOTRON 🎆</div>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- 當前打者 vs 投手雙邊對決資訊列 -->
                         <div id="live-matchup-info" class="matchup-bar"></div>
 
-                        <div class="action-pad-card" style="margin-top:14px;">
+                        <div class="action-pad-card play-log-card" style="margin-top:14px;">
                             <div class="pad-group-title">
                                 <span>📢 即時逐球/打席文字轉播 (Play-by-Play)</span>
                             </div>
@@ -258,7 +270,15 @@
                     </div>
 
                     <!-- 右欄：手機/平板大按鈕記錄區 -->
-                    <div class="action-pad-card">
+                    <div class="action-pad-card live-right-col">
+                        <!-- 語音播報確認橫幅與開關 -->
+                        <div class="voice-confirm-bar">
+                            <div id="voice-action-toast" class="voice-action-toast">🔊 點擊下方按鈕將同步語音播報確認</div>
+                            <button type="button" id="btn-toggle-voice" class="btn voice-toggle-btn" onclick="app.toggleVoiceAnnounce()">
+                                🔊 語音播報：開
+                            </button>
+                        </div>
+
                         <div class="pad-group-title">
                             <span>1️⃣ 逐球記錄（同時累計球數與守備隊投手用球數）</span>
                             <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="app.handleUndo()">↩️ 復原上一步 (Undo)</button>

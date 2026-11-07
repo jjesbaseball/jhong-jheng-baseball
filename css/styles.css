@@ -883,6 +883,7 @@ html, body {
     flex-direction: column;
     justify-content: space-between;
     box-shadow: var(--shadow-lg);
+    overflow: hidden;
 }
 
 .diamond-mode-banner {
@@ -1321,5 +1322,191 @@ html, body {
     }
     .games-list-grid {
         grid-template-columns: 1fr;
+    }
+}
+
+/* ==========================================================================
+   🔊 按鈕語音播報確認橫幅 (Voice Confirmation HUD)
+   ========================================================================== */
+.voice-confirm-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    background: rgba(6, 21, 39, 0.85);
+    border: 1.5px solid var(--border-color);
+    border-radius: 10px;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+}
+
+.voice-action-toast {
+    font-size: 0.9rem;
+    font-weight: 900;
+    color: var(--jj-gold-light);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.voice-action-toast.speaking {
+    color: #ffffff;
+    text-shadow: 0 0 12px rgba(203, 176, 99, 0.9);
+    transform: scale(1.03);
+}
+
+.voice-toggle-btn {
+    padding: 4px 10px;
+    font-size: 0.76rem;
+    white-space: nowrap;
+}
+
+/* ==========================================================================
+   🏟️ 球場大螢幕電視牆全壘打煙火特效 (Stadium Jumbotron HOME RUN Overlay)
+   ========================================================================== */
+.hr-jumbotron-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    background:
+        repeating-linear-gradient(
+            0deg,
+            rgba(0, 0, 0, 0.28) 0px,
+            rgba(0, 0, 0, 0.28) 2px,
+            transparent 2px,
+            transparent 4px
+        ),
+        radial-gradient(circle at 50% 45%, rgba(26, 12, 4, 0.88) 0%, rgba(4, 12, 26, 0.95) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+    cursor: pointer;
+    border-radius: calc(var(--radius-lg) - 2px);
+    box-shadow: inset 0 0 36px rgba(255, 200, 40, 0.55);
+}
+
+.hr-jumbotron-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+    animation: jumbotronBorderFlash 0.35s infinite alternate;
+}
+
+@keyframes jumbotronBorderFlash {
+    0% {
+        box-shadow: inset 0 0 25px rgba(255, 215, 0, 0.45), inset 0 0 0 3px #cbb063;
+    }
+    100% {
+        box-shadow: inset 0 0 55px rgba(255, 80, 20, 0.85), inset 0 0 0 5px #fffbeb;
+    }
+}
+
+.hr-fireworks-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.hr-jumbotron-content {
+    position: relative;
+    z-index: 2;
+    text-align: center;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.hr-flying-ball {
+    font-size: 2.3rem;
+    filter: drop-shadow(0 0 14px #facc15);
+    animation: hrBallFly 0.75s cubic-bezier(0.18, 0.89, 0.32, 1.28) infinite alternate;
+}
+
+@keyframes hrBallFly {
+    0% { transform: translateY(4px) scale(0.92) rotate(-15deg); }
+    100% { transform: translateY(-10px) scale(1.18) rotate(20deg); }
+}
+
+.hr-main-title {
+    font-family: "Impact", "Arial Black", "Segoe UI Black", sans-serif;
+    font-size: clamp(2.3rem, 6vw, 3.4rem);
+    font-weight: 900;
+    letter-spacing: 3px;
+    line-height: 1.05;
+    text-transform: uppercase;
+    background: linear-gradient(180deg, #ffffff 0%, #fef08a 30%, #f59e0b 65%, #dc2626 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 0 12px rgba(250, 204, 21, 0.95)) drop-shadow(0 4px 0 #7c2d12);
+    animation: hrTitlePop 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275) infinite alternate;
+    margin: 4px 0 8px 0;
+}
+
+@keyframes hrTitlePop {
+    0% { transform: scale(0.96) rotate(-1deg); }
+    100% { transform: scale(1.06) rotate(1deg); }
+}
+
+.hr-batter-banner {
+    background: linear-gradient(90deg, rgba(220, 38, 38, 0.92), rgba(180, 83, 9, 0.95), rgba(220, 38, 38, 0.92));
+    border: 2px solid #fef08a;
+    color: #ffffff;
+    font-weight: 900;
+    font-size: 0.96rem;
+    padding: 5px 16px;
+    border-radius: 999px;
+    box-shadow: 0 0 18px rgba(250, 204, 21, 0.7);
+    letter-spacing: 0.5px;
+}
+
+.hr-sub-hint {
+    margin-top: 8px;
+    font-size: 0.7rem;
+    font-weight: 900;
+    letter-spacing: 2px;
+    color: #fde68a;
+    text-shadow: 0 0 8px rgba(250, 204, 21, 0.8);
+}
+
+/* ==========================================================================
+   📱 手機版專屬排版：比賽紀錄時將「即時文字播報」移到最下方
+   （平板 >= 768px 與電腦版維持原本左右/原位排版不變動）
+   ========================================================================== */
+@media (max-width: 767px) {
+    .live-scorebook-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    .live-scorebook-grid > .live-left-col {
+        display: contents;
+    }
+
+    .live-scorebook-grid .diamond-card {
+        order: 1;
+    }
+
+    .live-scorebook-grid #live-matchup-info {
+        order: 2;
+        margin-top: 0;
+    }
+
+    .live-scorebook-grid > .live-right-col {
+        order: 3;
+    }
+
+    .live-scorebook-grid .play-log-card {
+        order: 4;
+        margin-top: 0 !important;
     }
 }
