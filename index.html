@@ -46,23 +46,36 @@
     <!-- 主內容區 -->
     <main class="main-container">
 
-        <!-- 中正國小少棒隊 金獅盾牌專屬英雄橫幅 -->
+        <!-- 中正國小少棒隊 金獅盾牌專屬英雄橫幅 + 隊內/對外數據一鍵切換 -->
         <section class="jj-hero-banner">
             <div class="jj-hero-left">
                 <img src="assets/logo.png" alt="JHONG JHENG Crest" class="jj-hero-crest">
                 <div class="jj-hero-text">
                     <div class="eng-motto">JHONG JHENG ELEMENTARY SCHOOL</div>
-                    <h2>中正國小少棒隊 ‧ 隊內三隊爭霸賽數據中心</h2>
-                    <p>瑞獅金爪・皇家藏青 ｜ 即時記錄孩子們的每一顆好球、每一次安打與每一場榮耀對決</p>
+                    <h2 id="hero-mode-title">中正國小少棒隊 ‧ 隊內三隊爭霸賽數據中心</h2>
+                    <p id="hero-mode-desc">瑞獅金爪・皇家藏青 ｜ 同一網址一鍵切換「隊內三隊聯賽」與「對外正式比賽」數據排行＆事後補打紀錄</p>
                 </div>
             </div>
-            <div style="display:flex;gap:10px;flex-wrap:wrap;z-index:1;">
-                <button class="btn btn-primary" onclick="app.switchTab('scorebook')">⚾ 立即開始記錄比賽</button>
-                <button class="btn" onclick="app.switchTab('trades')">🔁 球員交易中心</button>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:10px;z-index:1;">
+                <!-- 🏟️ 隊內三隊 vs 🌏 對外比賽 一鍵切換膠囊 -->
+                <div class="mode-switch-capsule">
+                    <button type="button" id="btn-mode-intra" class="mode-switch-btn active" onclick="app.setDataMode('intra')">
+                        🏟️ 隊內三隊爭霸數據
+                    </button>
+                    <button type="button" id="btn-mode-external" class="mode-switch-btn" onclick="app.setDataMode('external')">
+                        🌏 對外比賽對戰數據
+                    </button>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+                    <button class="btn" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#061527;font-weight:900;border-color:#fde68a;" onclick="app.openQuickBoxEntryModal()">
+                        📝 賽後補打紀錄 (隊內/對外)
+                    </button>
+                    <button class="btn btn-primary" onclick="app.switchTab('scorebook')">⚾ 實戰/重播計分板</button>
+                </div>
             </div>
         </section>
 
-        <!-- 三隊聯盟戰績排行看板 (Standings Cards) -->
+        <!-- 三隊聯盟戰績排行看板 / 對外比賽戰績總覽看板 -->
         <section id="league-standings-container" class="team-summary-bar"></section>
 
         <!-- ==============================================================
@@ -70,13 +83,15 @@
              ============================================================== -->
         <section id="view-toplist" class="tab-view active">
             <div class="section-toolbar">
-                <h2 class="section-title">CPBL 個人獎項排行榜 (TOP 5 Leaders)</h2>
+                <h2 id="toplist-section-title" class="section-title">CPBL 個人獎項排行榜 (TOP 5 Leaders)</h2>
                 <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                     <div id="team-filter-pills" class="pill-switch"></div>
                     <div class="pill-switch">
                         <button id="btn-cat-batting" class="pill-btn active" onclick="app.setStatsCategory('batting')">🏏 打擊排行榜</button>
                         <button id="btn-cat-pitching" class="pill-btn" onclick="app.setStatsCategory('pitching')">⚾ 投手排行榜</button>
                     </div>
+                    <button class="btn" style="border-color:#fbbf24;color:#fde68a;" onclick="app.openQuickBoxEntryModal()">📝 賽後補打紀錄</button>
+                    <button class="btn" style="border-color:var(--jj-gold);color:var(--jj-gold-light);" onclick="app.goToPhotoUploadSection()">📸 批次上傳選手照片</button>
                     <button class="btn" onclick="app.exportCSVStats()">📥 匯出 Excel (CSV)</button>
                 </div>
             </div>
@@ -109,42 +124,74 @@
              分頁 2：三隊雙邊對戰實戰電子計分本 (Dual-Team Live Scorebook)
              ============================================================== -->
         <section id="view-scorebook" class="tab-view">
-            <!-- A. 開新比賽設定面板 (從三隊任選兩隊對戰，同時記錄雙方打者與投手) -->
+            <!-- A. 開新比賽設定面板 (支援隊內三隊練習賽 & 對外正式比賽實戰/事後逐球重播補打) -->
             <div id="scorebook-setup-panel" class="stats-table-card" style="padding:22px;">
                 <div class="section-toolbar">
-                    <h2 class="section-title">⚾ 開啟新比賽（從三隊選擇兩隊對戰，自動同時記錄雙方投打數據）</h2>
-                    <button class="btn" onclick="app.openQuickBoxEntryModal()">📝 改用「賽後紙本快速補登」</button>
+                    <h2 id="setup-panel-title" class="section-title">⚾ 開啟新比賽（實戰逐球記錄 ／ 賽後逐打席重播補打）</h2>
+                    <button class="btn" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#061527;font-weight:900;border-color:#fde68a;" onclick="app.openQuickBoxEntryModal()">
+                        📝 現場沒空記？點此「賽後表格快速補打紀錄」
+                    </button>
+                </div>
+
+                <!-- 選擇比賽性質：隊內三隊賽 vs 對外比賽 -->
+                <div style="margin-bottom:16px;padding:12px 16px;background:rgba(6,21,39,0.65);border:1.5px solid var(--jj-gold);border-radius:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+                    <div style="font-weight:900;color:var(--jj-gold-light);font-size:0.95rem;">
+                        🎯 請選擇本場比賽類型（數據將自動歸入對應排行榜）：
+                    </div>
+                    <div class="pill-switch">
+                        <button type="button" id="setup-type-intra" class="pill-btn active" onclick="app.setSetupGameType('intra')">
+                            🏟️ 隊內三隊練習賽（紅・藍・白隊）
+                        </button>
+                        <button type="button" id="setup-type-external" class="pill-btn" onclick="app.setSetupGameType('external')">
+                            🌏 對外正式/友誼賽（🦁 中正國小 vs 外校對手）
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 對外比賽專屬設定列（當選擇「對外正式/友誼賽」時顯示） -->
+                <div id="setup-external-fields" class="form-grid" style="display:none;margin-bottom:14px;padding:14px;background:rgba(56,189,248,0.1);border:1.5px solid #38bdf8;border-radius:12px;">
+                    <div class="form-group">
+                        <label style="color:#7dd3fc;font-weight:800;">⚔️ 外校對手學校名稱（必填）</label>
+                        <input type="text" id="setup-opp-name" class="form-control" placeholder="例如：復興國小、忠孝國小、東園國小" value="外校對手">
+                    </div>
+                    <div class="form-group">
+                        <label style="color:#7dd3fc;font-weight:800;">🦁 中正國小攻守順序</label>
+                        <select id="setup-jj-side" class="form-control">
+                            <option value="away" selected>🚩 中正國小先攻（客隊・上半局打擊）</option>
+                            <option value="home">🏠 中正國小後攻（主隊・下半局打擊）</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div class="form-grid">
                     <div class="form-group">
-                        <label>比賽日期</label>
+                        <label>比賽日期（若事後補打可選過去日期）</label>
                         <input type="date" id="setup-game-date" class="form-control">
                     </div>
                     <div class="form-group">
-                        <label>賽事名稱 / 輪次</label>
+                        <label>賽事名稱 / 盃賽輪次</label>
                         <input type="text" id="setup-tournament" class="form-control" value="隊內三隊爭霸練習賽 (4局制)">
                     </div>
                     <div class="form-group">
-                        <label>正規比賽局數（隊內比賽預設 4 局）</label>
+                        <label>正規比賽局數</label>
                         <select id="setup-innings" class="form-control">
                             <option value="4" selected>4 局制（中正隊內比賽標準）</option>
                             <option value="3">3 局制（短局循環賽）</option>
                             <option value="5">5 局制</option>
-                            <option value="6">6 局制（正式少棒賽標準）</option>
+                            <option value="6">6 局制（對外正式少棒賽標準）</option>
                         </select>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" id="setup-pitcher-mode-group">
                         <label>投手指派模式（練習賽預設由自己隊伍投手投球）</label>
                         <select id="setup-pitcher-mode" class="form-control">
                             <option value="same" selected>🤝 同隊投手制（自己隊伍的投手投給自己隊友打）</option>
-                            <option value="opponent">⚔️ 對抗投手制（由守備方敵隊投手投球）</option>
+                            <option value="opponent">⚔️ 對抗投手制（由守備方投手投球）</option>
                         </select>
                     </div>
                 </div>
 
-                <!-- 先攻隊伍 vs 後攻隊伍選擇與各自先發名單 -->
-                <div class="scorebook-layout" style="margin-top:16px;">
+                <!-- A1. 隊內三隊對戰先發設定區 -->
+                <div id="setup-intra-lineup-grid" class="scorebook-layout" style="margin-top:16px;">
                     <div style="background:var(--bg-secondary);padding:16px;border-radius:12px;border:1px solid var(--border-color);">
                         <h3 style="color:var(--cpbl-gold-light);margin-bottom:10px;">🚩 先攻隊伍（客隊 Away — 上半局進攻 ＆ 由本隊投手投球）</h3>
                         <div class="form-grid">
@@ -178,9 +225,25 @@
                     </div>
                 </div>
 
-                <div style="margin-top:20px;display:flex;justify-content:flex-end;">
+                <!-- A2. 對外比賽（🦁 中正國小代表隊）先發打序與先發投手設定區 -->
+                <div id="setup-external-lineup-box" style="display:none;margin-top:16px;background:var(--bg-secondary);padding:16px;border-radius:12px;border:1.5px solid var(--jj-gold);">
+                    <h3 style="color:var(--jj-gold-light);margin-bottom:10px;">🦁 中正國小少棒代表隊 — 本場對外先發投手 ＆ 先發打序（⭐ A隊主力優先置頂）</h3>
+                    <div class="form-grid" style="margin-bottom:12px;">
+                        <div class="form-group">
+                            <label>⚾ 中正國小本場先發投手 (SP)</label>
+                            <select id="setup-ext-jj-sp" class="form-control"></select>
+                        </div>
+                    </div>
+                    <label style="display:block;font-size:0.84rem;color:var(--text-secondary);margin-bottom:6px;">🔢 點擊下方球員排入本場對外先發打序（第 1 棒 ～ 第 N 棒）：</label>
+                    <div id="setup-ext-jj-lineup-list" style="display:grid;gap:6px;"></div>
+                </div>
+
+                <div style="margin-top:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                    <button type="button" class="btn" onclick="app.openQuickBoxEntryModal()">
+                        📋 不想逐球按？改用「賽後表格快速補打紀錄」
+                    </button>
                     <button class="btn btn-primary" style="font-size:1.05rem;padding:12px 26px;" onclick="app.handleStartLiveGame()">
-                        🚀 開始兩隊對戰！進入實戰計分板
+                        🚀 開始比賽！進入實戰/補打計分板
                     </button>
                 </div>
             </div>
@@ -190,7 +253,12 @@
                 <div class="scoreboard-box">
                     <div class="scoreboard-top-meta">
                         <span id="live-tournament-title">比賽進行中</span>
-                        <span id="live-inning-badge" class="inning-badge-live">1局上</span>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <button type="button" class="btn" style="padding:3px 10px;font-size:0.76rem;border-color:var(--jj-gold);" onclick="app.shareParentLiveLink()">
+                                📺 複製家長直播連結
+                            </button>
+                            <span id="live-inning-badge" class="inning-badge-live">1局上</span>
+                        </div>
                     </div>
                     <div class="table-scroll-wrapper">
                         <table id="live-linescore-table" class="linescore-table"></table>
@@ -271,12 +339,17 @@
 
                     <!-- 右欄：手機/平板大按鈕記錄區 -->
                     <div class="action-pad-card live-right-col">
-                        <!-- 語音播報確認橫幅與開關 -->
+                        <!-- 語音播報確認橫幅與擬真主播聲線選擇 -->
                         <div class="voice-confirm-bar">
                             <div id="voice-action-toast" class="voice-action-toast">🔊 點擊下方按鈕將同步語音播報確認</div>
-                            <button type="button" id="btn-toggle-voice" class="btn voice-toggle-btn" onclick="app.toggleVoiceAnnounce()">
-                                🔊 語音播報：開
-                            </button>
+                            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                                <select id="voice-select-dropdown" class="form-control" style="width:auto;max-width:165px;padding:4px 8px;font-size:0.75rem;height:30px;" onchange="app.onVoiceSelectChange(this.value)" title="選擇播報員聲線（推薦 Natural 自然人聲）">
+                                    <option value="">🎙️ 自動最佳擬真人聲</option>
+                                </select>
+                                <button type="button" id="btn-toggle-voice" class="btn voice-toggle-btn" onclick="app.toggleVoiceAnnounce()">
+                                    🔊 語音播報：開
+                                </button>
+                            </div>
                         </div>
 
                         <div class="pad-group-title">
@@ -408,6 +481,34 @@
                 </div>
             </div>
 
+            <!-- 📸 選手照片整個資料夾批次上傳專區 (檔名＝選手名稱) -->
+            <div id="photo-batch-upload-section" class="stats-table-card" style="padding:20px;margin-bottom:24px;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px;margin-bottom:14px;">
+                    <div>
+                        <h3 style="color:var(--cpbl-gold-light);margin-bottom:6px;font-size:1.12rem;">
+                            📸 選手照片資料夾批次上傳區（檔名 ＝ 選手名稱，例如：賴冠融.jpg）
+                        </h3>
+                        <p style="font-size:0.84rem;color:var(--text-secondary);">
+                            選擇包含學生照片的<strong>整個資料夾</strong>（或多張照片），系統會自動比對照片檔名與三隊 42 位選手姓名，自動壓縮裁切並同步至雲端資料庫與 CPBL 第一名排行榜！您也可以直接點擊下方任一選手大頭貼單獨更換照片。
+                        </p>
+                    </div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                        <label class="btn btn-primary" style="cursor:pointer;">
+                            📁 選擇整個照片資料夾上傳
+                            <input type="file" id="folder-photo-input" webkitdirectory directory multiple accept="image/*" style="display:none;" onchange="app.handleFolderPhotoUpload(event)">
+                        </label>
+                        <label class="btn" style="cursor:pointer;border-color:var(--jj-gold);">
+                            🖼️ 或多選照片檔案上傳
+                            <input type="file" id="multi-photo-input" multiple accept="image/*" style="display:none;" onchange="app.handleFolderPhotoUpload(event)">
+                        </label>
+                        <input type="file" id="single-player-photo-input" accept="image/*" style="display:none;" onchange="app.handleSinglePlayerPhotoUpload(event)">
+                    </div>
+                </div>
+
+                <div id="photo-upload-status-bar" style="font-size:0.84rem;font-weight:800;color:var(--jj-gold-light);margin-bottom:12px;"></div>
+                <div id="photo-upload-wall-grid" class="photo-wall-grid"></div>
+            </div>
+
             <!-- 三隊球員完整名冊 -->
             <div class="stats-table-card">
                 <div class="table-filter-bar">
@@ -440,9 +541,10 @@
              ============================================================== -->
         <section id="view-games" class="tab-view">
             <div class="section-toolbar">
-                <h2 class="section-title">三隊歷史對戰計分本與成績查詢</h2>
+                <h2 class="section-title" id="games-history-section-title">歷史對戰計分本與成績查詢（隊內三隊賽 ＆ 對外賽事）</h2>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;">
-                    <button class="btn" onclick="app.openQuickBoxEntryModal()">📝 賽後紙本快速補登</button>
+                    <button class="btn" style="background:linear-gradient(135deg,#0f3d3e,#0b5345);color:#fff;border-color:#34d399;font-weight:900;" onclick="app.openQuickBoxEntryModal(null, 'external')">🌏 補打對外比賽紀錄</button>
+                    <button class="btn" onclick="app.openQuickBoxEntryModal(null, 'intra')">🏟️ 補打隊內比賽紀錄</button>
                     <button class="btn btn-primary" onclick="app.switchTab('scorebook')">⚾ 前往實戰計分本</button>
                 </div>
             </div>

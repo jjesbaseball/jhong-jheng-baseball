@@ -18,11 +18,29 @@ const DEFAULT_LEAGUE_DATA = {
         qualifyPaPerGame: 1.0      // 打擊排行榜規定打席係數
     },
     teams: [
+        { id: 'tA', name: 'A隊', code: 'A', emoji: '⭐', color: '#f59e0b', captain: '王宣樺', note: '中正國小少棒代表A隊（15名主力隊員・主要代表對外參賽）' },
         { id: 't1', name: '紅隊', code: 'RED', emoji: '🔴', color: '#ef4444', captain: '賴冠融', note: '中正國小少棒紅隊（14名隊員）' },
         { id: 't2', name: '藍隊', code: 'BLUE', emoji: '🔵', color: '#3b82f6', captain: '曾聖壹', note: '中正國小少棒藍隊（14名隊員）' },
         { id: 't3', name: '白隊', code: 'WHITE', emoji: '⚪', color: '#e2e8f0', captain: '黃安誠', note: '中正國小少棒白隊（14名隊員）' }
     ],
     players: [
+        // ⭐ A隊 (tA) — 共 15 人（對外主力代表隊隊員，在對外賽選取名單中排在最前面）
+        { id: 'p_a1',  teamId: 'tA', number: '1',  name: '王宣樺', grade: '五年級', bats: 'R', throws: 'R', pos: 'P / IF',  note: 'A隊 #1 ｜ 守位: P ｜ 生日: 2015/02/12' },
+        { id: 'p_a2',  teamId: 'tA', number: '2',  name: '張念恩', grade: '六年級', bats: 'R', throws: 'R', pos: 'C / IF',  note: 'A隊 #2 ｜ 守位: C ｜ 生日: 2014/10/12' },
+        { id: 'p_a3',  teamId: 'tA', number: '3',  name: '黃俊祥', grade: '六年級', bats: 'R', throws: 'R', pos: 'IF',      note: 'A隊 #3 ｜ 守位: IF ｜ 生日: 2014/10/02' },
+        { id: 'p_a4',  teamId: 'tA', number: '4',  name: '蔡丞熙', grade: '五年級', bats: 'R', throws: 'R', pos: 'IF',      note: 'A隊 #4 ｜ 守位: IF ｜ 生日: 2015/08/23' },
+        { id: 'p_a5',  teamId: 'tA', number: '5',  name: '楊宸語', grade: '四年級', bats: 'R', throws: 'R', pos: 'IF',      note: 'A隊 #5 ｜ 守位: IF ｜ 生日: 2016/12/09' },
+        { id: 'p_a6',  teamId: 'tA', number: '6',  name: '陳軒睿', grade: '五年級', bats: 'R', throws: 'R', pos: 'IF',      note: 'A隊 #6 ｜ 守位: IF ｜ 生日: 2015/03/05' },
+        { id: 'p_a7',  teamId: 'tA', number: '7',  name: '葉晁昕', grade: '六年級', bats: 'R', throws: 'R', pos: 'OF',      note: 'A隊 #7 ｜ 守位: OF ｜ 生日: 2014/11/06' },
+        { id: 'p_a8',  teamId: 'tA', number: '8',  name: '楊承鑫', grade: '六年級', bats: 'R', throws: 'R', pos: 'OF',      note: 'A隊 #8 ｜ 守位: OF ｜ 生日: 2014/09/21' },
+        { id: 'p_a9',  teamId: 'tA', number: '9',  name: '黃安正', grade: '五年級', bats: 'R', throws: 'R', pos: 'OF',      note: 'A隊 #9 ｜ 守位: OF ｜ 生日: 2015/06/16' },
+        { id: 'p_a10', teamId: 'tA', number: '10', name: '黃宥珽', grade: '六年級', bats: 'R', throws: 'R', pos: 'IF',      note: 'A隊 #10 ｜ 守位: IF ｜ 生日: 2014/11/08' },
+        { id: 'p_a11', teamId: 'tA', number: '11', name: '任愷頡', grade: '五年級', bats: 'R', throws: 'R', pos: 'P / IF',  note: 'A隊 #11 ｜ 守位: P ｜ 生日: 2015/01/14' },
+        { id: 'p_a12', teamId: 'tA', number: '12', name: '薛荻傑', grade: '六年級', bats: 'R', throws: 'R', pos: 'OF',      note: 'A隊 #12 ｜ 守位: OF ｜ 生日: 2014/10/25' },
+        { id: 'p_a13', teamId: 'tA', number: '13', name: '許辰',   grade: '四年級', bats: 'R', throws: 'R', pos: 'IF',      note: 'A隊 #13 ｜ 守位: IF ｜ 生日: 2016/01/04' },
+        { id: 'p_a14', teamId: 'tA', number: '14', name: '李昕燁', grade: '五年級', bats: 'R', throws: 'R', pos: 'IF',      note: 'A隊 #14 ｜ 守位: IF ｜ 生日: 2015/10/22' },
+        { id: 'p_a15', teamId: 'tA', number: '15', name: '李昕郇', grade: '二年級', bats: 'R', throws: 'R', pos: 'IF',      note: 'A隊 #15 ｜ 守位: IF ｜ 生日: 2017/05/18' },
+
         // 🔴 紅隊 (t1) — 共 14 人
         { id: 'p1',  teamId: 't1', number: '1',  name: '賴冠融', grade: '少棒隊員', bats: 'R', throws: 'R', pos: 'P / IF', note: '紅隊 #1' },
         { id: 'p2',  teamId: 't1', number: '2',  name: '黃俊宏', grade: '少棒隊員', bats: 'R', throws: 'R', pos: 'C / IF', note: '紅隊 #2' },
@@ -137,6 +155,19 @@ class DataStore {
 
         d.games = Array.isArray(d.games) ? d.games : (d.games ? Object.values(d.games) : []);
         d.trades = Array.isArray(d.trades) ? d.trades : (d.trades ? Object.values(d.trades) : []);
+
+        // 確保 A隊 與 15名主力隊員自動併入既有快取與雲端資料庫
+        const aTeamTemplate = DEFAULT_LEAGUE_DATA.teams.find(t => t.id === 'tA');
+        if (aTeamTemplate && !d.teams.some(t => t.id === 'tA')) {
+            d.teams.unshift(JSON.parse(JSON.stringify(aTeamTemplate)));
+        }
+        const aPlayersTemplates = DEFAULT_LEAGUE_DATA.players.filter(p => p.teamId === 'tA');
+        aPlayersTemplates.forEach(ap => {
+            const exists = d.players.some(p => p.id === ap.id || (p.teamId === 'tA' && p.name === ap.name));
+            if (!exists) {
+                d.players.push(JSON.parse(JSON.stringify(ap)));
+            }
+        });
 
         d.games.forEach(g => {
             if (!g || typeof g !== 'object') return;
@@ -339,8 +370,16 @@ class DataStore {
         this.save();
     }
 
-    getTeam(teamId) {
-        return (this.data.teams || []).find(t => t.id === teamId) || { id: teamId, name: '未分隊', emoji: '⚾', color: '#64748b' };
+    getTeam(teamId, customOppName = '') {
+        if (teamId === 'JJ') {
+            return { id: 'JJ', name: '中正國小', code: 'JJ', emoji: '🦁', color: '#cbb063' };
+        }
+        if (teamId === 'OPP' || String(teamId || '').startsWith('OPP:')) {
+            const parsedOpp = String(teamId || '').startsWith('OPP:') ? String(teamId).slice(4) : '';
+            const oppName = customOppName || parsedOpp || '外校對手';
+            return { id: teamId, name: oppName, code: 'OPP', emoji: '⚔️', color: '#38bdf8' };
+        }
+        return (this.data.teams || []).find(t => t.id === teamId) || { id: teamId, name: customOppName || '未分隊', emoji: '⚾', color: '#64748b' };
     }
 
     getPlayer(playerId) {
@@ -349,6 +388,13 @@ class DataStore {
 
     getPlayersByTeam(teamId) {
         if (!teamId || teamId === 'ALL') return this.data.players || [];
+        if (teamId === 'JJ') {
+            const all = this.data.players || [];
+            // 對外賽代表隊選取名單中，A隊排在最前面！
+            const aList = all.filter(p => p.teamId === 'tA');
+            const otherList = all.filter(p => p.teamId !== 'tA');
+            return [...aList, ...otherList];
+        }
         return (this.data.players || []).filter(p => p.teamId === teamId);
     }
 }

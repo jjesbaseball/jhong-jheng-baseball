@@ -133,6 +133,8 @@ class LiveScorebook {
             id: 'g_' + Date.now(),
             date: config.date || new Date().toISOString().slice(0, 10),
             tournament: config.tournament || '隊內三隊爭霸練習賽 (4局制)',
+            isExternal: Boolean(config.isExternal),
+            opponentName: config.opponentName || '',
             awayTeamId,
             homeTeamId,
             maxInnings,
@@ -166,13 +168,7 @@ class LiveScorebook {
             pitcherOrder: [awayStarterId, homeStarterId].filter(Boolean),
             battingStats,
             pitchingStats,
-            playByPlay: [
-                {
-                    inning: '1局上',
-                    time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }),
-                    text: `⚾ ${maxInnings}局制隊內賽開打！先攻【${awayTeam.emoji}${awayTeam.name}】vs 後攻【${homeTeam.emoji}${homeTeam.name}】（${sameTeamPitcher ? '同隊投手餵球/投球制' : '對抗投手制'}）`
-                }
-            ]
+            playByPlay: []
         };
 
         this.saveLiveState();
@@ -258,6 +254,13 @@ class LiveScorebook {
         const lineup = isTop ? this.state.awayLineup : this.state.homeLineup;
         const bIdx = isTop ? this.state.awayBatterIndex : this.state.homeBatterIndex;
         const batterId = lineup.length > 0 ? lineup[bIdx % lineup.length] : null;
+        const battingTeamId = isTop ? this.state.awayTeamId : this.state.homeTeamId;
+
+        let batter = batterId ? window.store.getPlayer(batterId) : null;
+        if (!batter && (batterId === 'opp_batter' || String(battingTeamId || '').startsWith('OPP'))) {
+            const oppTeam = window.store.getTeam(battingTeamId);
+            batter = { id: 'opp_batter', name: `${oppTeam.name}打者`, number: '對手', teamId: battingTeamId, pos: '對手' };
+        }
 
         const pitcherId = sameTeam
             ? (isTop ? this.state.awayPitcherId : this.state.homePitcherId)
@@ -265,7 +268,7 @@ class LiveScorebook {
 
         return {
             orderNo: lineup.length > 0 ? (bIdx % lineup.length) + 1 : 1,
-            batter: batterId ? window.store.getPlayer(batterId) : null,
+            batter,
             pitcher: pitcherId ? window.store.getPlayer(pitcherId) : null
         };
     }
@@ -307,7 +310,8 @@ class LiveScorebook {
         if (!this.state) return;
         this.pushHistory();
 
-        const { pitcher } = this.getCurrentMatchup();
+        const { batter, pitcher } = this.getCurrentMatchup();
+        const batterName = batter ? batter.name : '';
         const pLine = pitcher ? this.ensurePitcherLine(pitcher.id, pitcher.teamId) : null;
 
         if (type === 'strike_looking' || type === 'strike_swinging') {
@@ -321,6 +325,7 @@ class LiveScorebook {
                 this.recordPlay({ type: 'SO', autoFromPitch: true });
                 return;
             }
+            this.addLog(`${batterName} ${type === 'strike_looking' ? '好球' : '揮棒落空'}`.trim());
         } else if (type === 'foul') {
             if (pLine) {
                 pLine.np += 1;
@@ -329,6 +334,7 @@ class LiveScorebook {
             if (this.state.strikes < 2) {
                 this.state.strikes += 1;
             }
+            this.addLog(`${batterName} 界外球`.trim());
         } else if (type === 'ball') {
             if (pLine) {
                 pLine.np += 1;
@@ -339,6 +345,7 @@ class LiveScorebook {
                 this.recordPlay({ type: 'BB', autoFromPitch: true });
                 return;
             }
+            this.addLog(`${batterName} 壞球`.trim());
         }
 
         this.saveLiveState();
@@ -414,7 +421,7 @@ class LiveScorebook {
         }
 
         const runnerObj = { playerId: batter.id, teamId: battingTeam.id, name: batter.name, number: batter.number };
-        let desc = `${battingTeam.emoji}#${batter.number} ${batter.name} (投手：${pitcher ? pitcher.name : '同隊投手'})`;
+        let resultLabel = type;
 
         if (['1B', '2B', '3B', 'HR'].includes(type)) {
             bLine.ab += 1;
@@ -442,7 +449,7 @@ class LiveScorebook {
                 }
             });
             this.addRuns(runsScored, true);
-            desc += ` 擊出${labelMap[type]}${runsScored > 0 ? `（${runsScored}分打點）` : ''}`;
+            resultLabel = labelMap[type];
         } else if (type === 'BB' || type === 'HBP') {
             if (type === 'BB') { bLine.bb += 1; if (pLine) pLine.bb += 1; }
             if (type === 'HBP') { bLine.hbp += 1; if (pLine) pLine.hbp += 1; }
@@ -453,7 +460,7 @@ class LiveScorebook {
                 if (sp && sp.playerId) this.ensureBatterLine(sp.playerId, sp.teamId).r += 1;
             });
             this.addRuns(runsScored, true);
-            desc += ` 獲得${type === 'BB' ? '四壞保送' : '觸身球'}${runsScored > 0 ? `（擠回 ${runsScored} 分）` : ''}`;
+            resultLabel = type === 'BB' ? '四壞保送' : '觸身球';
         } else if (type === 'ROE') {
             bLine.ab += 1;
             bLine.roe += 1;
@@ -464,7 +471,7 @@ class LiveScorebook {
                 if (sp && sp.playerId) this.ensureBatterLine(sp.playerId, sp.teamId).r += 1;
             });
             this.addRuns(runsScored, false);
-            desc += ` 因守備失誤上壘${runsScored > 0 ? `（得 ${runsScored} 分，非自責）` : ''}`;
+            resultLabel = '失誤上壘';
         } else if (type === 'SO') {
             bLine.ab += 1;
             bLine.so += 1;
@@ -473,12 +480,12 @@ class LiveScorebook {
                 pLine.outs += 1;
             }
             this.state.outs += 1;
-            desc += ` 遭到三振 K！ (${this.state.outs}出局)`;
+            resultLabel = '三振出局';
         } else if (type === 'GO' || type === 'FO') {
             bLine.ab += 1;
             if (pLine) pLine.outs += 1;
             this.state.outs += 1;
-            desc += ` ${type === 'GO' ? '滾地球出局' : '飛球接殺出局'} (${this.state.outs}出局)`;
+            resultLabel = type === 'GO' ? '滾地出局' : '飛球出局';
         } else if (type === 'DP') {
             bLine.ab += 1;
             const addedOuts = Math.min(2, 3 - this.state.outs);
@@ -486,7 +493,7 @@ class LiveScorebook {
             this.state.outs += addedOuts;
             if (this.state.bases.first) this.state.bases.first = null;
             else if (this.state.bases.second) this.state.bases.second = null;
-            desc += ` 雙殺守備！ (${this.state.outs}出局)`;
+            resultLabel = '雙殺出局';
         } else if (type === 'SAC') {
             bLine.sac += 1;
             if (pLine) pLine.outs += 1;
@@ -499,24 +506,23 @@ class LiveScorebook {
                 this.state.bases.second = this.state.bases.first;
                 this.state.bases.first = null;
             }
-            desc += ` 犧牲觸擊推進跑者 (${this.state.outs}出局)`;
+            resultLabel = '犧牲觸擊';
         } else if (type === 'SF') {
             bLine.sf += 1;
             if (pLine) pLine.outs += 1;
             this.state.outs += 1;
-            let scored = 0;
             if (this.state.bases.third) {
                 const sp = this.state.bases.third;
                 if (sp && sp.playerId) this.ensureBatterLine(sp.playerId, sp.teamId).r += 1;
                 this.state.bases.third = null;
-                scored = 1;
                 bLine.rbi += 1;
                 this.addRuns(1, true);
             }
-            desc += ` 高飛犧牲打${scored ? '（1分打點）' : ''} (${this.state.outs}出局)`;
+            resultLabel = '高飛犧牲打';
         }
 
-        this.addLog(desc);
+        // 僅播報「選手名字 ＋ 結果」
+        this.addLog(`${batter.name} ${resultLabel}`);
 
         if (isTop) {
             this.state.awayBatterIndex = (this.state.awayBatterIndex + 1) % Math.max(1, this.state.awayLineup.length);
@@ -543,7 +549,6 @@ class LiveScorebook {
         const pLine = pitcher ? this.ensurePitcherLine(pitcher.id, pitcher.teamId) : null;
         const nextBaseMap = { first: 'second', second: 'third', third: 'home' };
         const nextBase = nextBaseMap[baseKey];
-        const baseNameMap = { first: '一壘', second: '二壘', third: '三壘' };
 
         if (action === 'SB') {
             if (runner.playerId) {
@@ -553,11 +558,10 @@ class LiveScorebook {
             if (nextBase === 'home') {
                 if (runner.playerId) this.ensureBatterLine(runner.playerId, runner.teamId).r += 1;
                 this.addRuns(1, true);
-                this.addLog(`🏃 ${runner.name} 盜本壘成功！得 1 分`);
             } else {
                 this.state.bases[nextBase] = runner;
-                this.addLog(`🏃 ${runner.name} 盜上${baseNameMap[nextBase]}成功 (SB)`);
             }
+            this.addLog(`${runner.name} 盜壘成功`);
         } else if (action === 'CS') {
             if (runner.playerId) {
                 this.ensureBatterLine(runner.playerId, runner.teamId).cs += 1;
@@ -565,7 +569,7 @@ class LiveScorebook {
             if (pLine) pLine.outs += 1;
             this.state.bases[baseKey] = null;
             this.state.outs += 1;
-            this.addLog(`🚫 ${runner.name} 盜壘遭阻殺出局 (${this.state.outs}出局)`);
+            this.addLog(`${runner.name} 盜壘失敗`);
             if (this.state.outs >= 3) this.switchHalfInning(false);
         } else if (action === 'WP') {
             if (pLine) pLine.wp += 1;
@@ -573,16 +577,15 @@ class LiveScorebook {
             if (nextBase === 'home') {
                 if (runner.playerId) this.ensureBatterLine(runner.playerId, runner.teamId).r += 1;
                 this.addRuns(1, true);
-                this.addLog(`⚡ 暴投/捕逸，${runner.name} 跑回本壘得 1 分`);
             } else {
                 this.state.bases[nextBase] = runner;
-                this.addLog(`⚡ 暴投/捕逸，${runner.name} 推進至${baseNameMap[nextBase]}`);
             }
+            this.addLog(`${runner.name} 暴投推進`);
         } else if (action === 'SCORE') {
             this.state.bases[baseKey] = null;
             if (runner.playerId) this.ensureBatterLine(runner.playerId, runner.teamId).r += 1;
             this.addRuns(1, true);
-            this.addLog(`🏠 ${runner.name} 跑回本壘得分 (+1分)`);
+            this.addLog(`${runner.name} 跑回得分`);
         } else if (action === 'REMOVE') {
             this.state.bases[baseKey] = null;
         }
@@ -610,7 +613,6 @@ class LiveScorebook {
         }
 
         this.ensurePitcherLine(newPitcherId, targetTeamId);
-        this.addLog(`🔄 更換投手：#${p ? p.number : ''} ${p ? p.name : ''} 登板投球`);
         this.saveLiveState();
     }
 
@@ -626,9 +628,6 @@ class LiveScorebook {
         if (this.state.half === 'top') {
             this.state.half = 'bottom';
         } else {
-            if (this.state.inning >= (this.state.maxInnings || 4)) {
-                this.addLog(`🏁 已完成第 ${this.state.inning} 局下半（滿 ${this.state.maxInnings || 4} 局規定局數），可點選「結束比賽並結算成績」！`);
-            }
             this.state.half = 'top';
             this.state.inning += 1;
             const idx = this.state.inning - 1;
@@ -638,8 +637,6 @@ class LiveScorebook {
             }
         }
 
-        const { battingTeam, fieldingTeam, pitcherTeam } = this.getActiveTeams();
-        this.addLog(`🔔 攻守交換，進入 ${this.getInningLabel()}（${battingTeam.emoji}${battingTeam.name}進攻・由${pitcherTeam.name}投手投球 ｜ ${fieldingTeam.emoji}${fieldingTeam.name}守備）`);
         this.saveLiveState();
     }
 
@@ -653,7 +650,7 @@ class LiveScorebook {
         const pitcherOrderArr = Array.isArray(st.pitcherOrder) ? st.pitcherOrder : [];
 
         const batArray = Object.values(battingStatsObj).filter(b =>
-            b && (b.pa > 0 || b.ab > 0 || b.h > 0 || b.r > 0 || b.rbi > 0 || b.bb > 0 || b.sb > 0 || b.cs > 0)
+            b && b.playerId !== 'opp_batter' && (b.pa > 0 || b.ab > 0 || b.h > 0 || b.r > 0 || b.rbi > 0 || b.bb > 0 || b.sb > 0 || b.cs > 0)
         );
 
         const allPitcherIds = Array.from(new Set([...pitcherOrderArr, ...Object.keys(pitchingStatsObj)]));
@@ -675,6 +672,8 @@ class LiveScorebook {
             id: st.id || ('g_' + Date.now()),
             date: st.date || new Date().toISOString().slice(0, 10),
             tournament: st.tournament || '隊內三隊爭霸練習賽 (4局制)',
+            isExternal: Boolean(st.isExternal),
+            opponentName: st.opponentName || '',
             awayTeamId: st.awayTeamId,
             homeTeamId: st.homeTeamId,
             sameTeamPitcher: st.sameTeamPitcher !== false,

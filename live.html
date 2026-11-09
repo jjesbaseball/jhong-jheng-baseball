@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#10345c">
+    <title>中正國小少棒隊｜LIVE 家長即時觀賽轉播室（球場模擬 & 文字播報）</title>
+    <link rel="icon" type="image/png" href="assets/logo.png">
+    <link rel="apple-touch-icon" href="assets/logo.png">
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        /* 家長專屬觀賽頁 (Read-Only Live Gameday Viewer) 客製優化 */
+        .parent-live-container {
+            max-width: 680px;
+            margin: 0 auto;
+            padding: 14px 12px 48px 12px;
+        }
+        .live-status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 900;
+            background: rgba(239, 68, 68, 0.22);
+            color: #fca5a5;
+            border: 1px solid #ef4444;
+        }
+        .live-status-pill.standby {
+            background: rgba(148, 163, 184, 0.2);
+            color: #cbd5e1;
+            border-color: rgba(148, 163, 184, 0.45);
+        }
+        .latest-play-banner {
+            background: linear-gradient(90deg, rgba(203, 176, 99, 0.22) 0%, rgba(16, 52, 92, 0.85) 100%);
+            border: 1.5px solid var(--jj-gold);
+            border-radius: 12px;
+            padding: 11px 14px;
+            margin-top: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+            transition: transform 0.2s ease;
+        }
+        .latest-play-banner.flash {
+            transform: scale(1.02);
+            box-shadow: 0 0 22px rgba(203, 176, 99, 0.75);
+        }
+        .parent-Diamond-card .base-node {
+            cursor: default;
+        }
+        .parent-Diamond-card .base-node:hover {
+            transform: none;
+        }
+        .parent-Diamond-card .base-second:hover {
+            transform: translateX(-50%);
+        }
+        .parent-box-tabs {
+            display: flex;
+            gap: 8px;
+            margin: 16px 0 10px 0;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 頂部中正國小金獅盾牌家長觀賽導覽列 -->
+    <header class="top-header">
+        <div class="header-inner" style="max-width:680px;">
+            <div class="brand-group">
+                <img src="assets/logo.png" alt="中正國小少棒隊徽" class="brand-logo-img" style="width:48px;height:48px;">
+                <div class="brand-titles">
+                    <div class="varsity-eng" style="font-size:0.68rem;">JHONG JHENG BASEBALL LIVE CAST</div>
+                    <h1 style="font-size:1.12rem;">
+                        <span>中正國小少棒 線上實況轉播室</span>
+                    </h1>
+                    <p id="viewer-sync-subtitle" style="font-size:0.75rem;">📡 家長專屬即時觀賽頁（自動同步球場紀錄）</p>
+                </div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:8px;">
+                <button type="button" id="viewer-voice-btn" class="btn" style="padding:6px 10px;font-size:0.76rem;" onclick="liveViewer.toggleVoice()">
+                    🔇 語音轉播：關
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="parent-live-container">
+
+        <!-- 頂部狀態橫幅 -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+            <div id="viewer-live-badge" class="live-status-pill">
+                <span class="live-dot"></span>
+                <span>LIVE 比賽即時轉播中</span>
+            </div>
+            <span id="viewer-last-update" style="font-size:0.75rem;color:var(--text-secondary);">連線同步中...</span>
+        </div>
+
+        <!-- 1. 即時電子計分板 (Scoreboard) -->
+        <div class="scoreboard-box">
+            <div class="scoreboard-top-meta">
+                <span id="viewer-tournament-title">載入賽事資訊中...</span>
+                <span id="viewer-inning-badge" class="inning-badge-live">準備中</span>
+            </div>
+            <div class="table-scroll-wrapper">
+                <table id="viewer-linescore-table" class="linescore-table"></table>
+            </div>
+            <div class="bso-pitch-strip">
+                <div class="bso-group">
+                    <div class="bso-item">
+                        <span style="color:var(--ball-green);">B</span>
+                        <span id="v-dot-b-1" class="bso-dot"></span>
+                        <span id="v-dot-b-2" class="bso-dot"></span>
+                        <span id="v-dot-b-3" class="bso-dot"></span>
+                    </div>
+                    <div class="bso-item">
+                        <span style="color:var(--strike-yellow);">S</span>
+                        <span id="v-dot-s-1" class="bso-dot"></span>
+                        <span id="v-dot-s-2" class="bso-dot"></span>
+                    </div>
+                    <div class="bso-item">
+                        <span style="color:var(--out-red);">O</span>
+                        <span id="v-dot-o-1" class="bso-dot"></span>
+                        <span id="v-dot-o-2" class="bso-dot"></span>
+                    </div>
+                </div>
+                <div id="viewer-pitch-count-pill" class="pitch-limit-pill">⚾ 投手用球數：0 球</div>
+            </div>
+        </div>
+
+        <!-- 2. 模擬棒球場壘包實況圖 + 全壘打大螢幕電視牆煙火特效 -->
+        <div class="diamond-card parent-Diamond-card" id="viewer-diamond-card">
+            <div class="diamond-mode-banner">
+                <span id="viewer-attack-defense-tag" class="attack-defense-tag batting">🔥 等待開賽中</span>
+            </div>
+
+            <div class="diamond-field">
+                <div class="diamond-lines"></div>
+                <div id="v-base-second" class="base-node base-second">
+                    <span class="base-label">二壘 (2B)</span>
+                    <span id="v-runner-second" class="runner-name">空壘</span>
+                </div>
+                <div id="v-base-third" class="base-node base-third">
+                    <span class="base-label">三壘 (3B)</span>
+                    <span id="v-runner-third" class="runner-name">空壘</span>
+                </div>
+                <div id="v-base-first" class="base-node base-first">
+                    <span class="base-label">一壘 (1B)</span>
+                    <span id="v-runner-first" class="runner-name">空壘</span>
+                </div>
+                <div class="home-plate-indicator">⚾ 本壘 Home（場上即時壘包狀態）</div>
+            </div>
+
+            <!-- 🏟️ 球場大螢幕電視牆全壘打煙火特效 (HOME RUN Jumbotron Overlay) -->
+            <div id="v-hr-jumbotron-overlay" class="hr-jumbotron-overlay" onclick="liveViewer.hideHomeRunJumbotron()">
+                <canvas id="v-hr-fireworks-canvas" class="hr-fireworks-canvas"></canvas>
+                <div class="hr-jumbotron-content">
+                    <div class="hr-flying-ball">⚾</div>
+                    <div class="hr-main-title">HOME RUN!</div>
+                    <div id="v-hr-batter-banner" class="hr-batter-banner">🔥 全壘打！</div>
+                    <div class="hr-sub-hint">🎆 JHONG JHENG STADIUM JUMBOTRON 🎆</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. 最新一球動態快訊橫幅 -->
+        <div id="viewer-latest-play-box" class="latest-play-banner">
+            <span style="font-size:1.3rem;">🎙️</span>
+            <div style="flex:1;">
+                <div style="font-size:0.72rem;color:var(--jj-gold-light);font-weight:800;">最新場上動態 (Latest Play)</div>
+                <div id="viewer-latest-play-text" style="font-size:0.96rem;font-weight:900;color:#ffffff;">等待球場紀錄員傳送第一球動態...</div>
+            </div>
+        </div>
+
+        <!-- 4. 目前場上投打對決資訊 -->
+        <div id="viewer-matchup-info" class="matchup-bar"></div>
+
+        <!-- 5. 即時逐球 / 打席文字轉播 (Play-by-Play) -->
+        <div class="action-pad-card" style="margin-top:14px;">
+            <div class="pad-group-title">
+                <span>📢 即時逐球 / 打席文字播報 (Live Play-by-Play)</span>
+                <span id="viewer-play-count" style="font-size:0.74rem;color:var(--text-secondary);">0 則播報</span>
+            </div>
+            <div id="viewer-play-log" class="play-log-list" style="max-height:340px;"></div>
+        </div>
+
+        <!-- 6. 本場兩隊選手即時成績 Box Score -->
+        <div class="action-pad-card" style="margin-top:14px;">
+            <div class="pad-group-title">
+                <span>📊 本場兩隊選手即時打擊成績 (Live Box Score)</span>
+            </div>
+            <div class="table-scroll-wrapper">
+                <table class="cpbl-table" style="font-size:0.82rem;">
+                    <thead>
+                        <tr>
+                            <th class="align-left">隊伍</th>
+                            <th class="align-left">選手</th>
+                            <th>打席PA</th>
+                            <th>打數AB</th>
+                            <th>安打H</th>
+                            <th>全壘HR</th>
+                            <th>打點RBI</th>
+                            <th>得分R</th>
+                            <th>盜壘SB</th>
+                        </tr>
+                    </thead>
+                    <tbody id="viewer-live-box-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <script src="js/firebase-config.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/stats-engine.js"></script>
+    <script src="js/live-viewer.js"></script>
+</body>
+</html>
