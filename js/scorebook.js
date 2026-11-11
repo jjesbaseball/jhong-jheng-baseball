@@ -5,12 +5,48 @@
  * 2. 練習賽「同隊投手制」：進攻時由自己隊伍的投手投給自己隊友打，同時統計打者與本隊投手數據！
  */
 
+const LIVE_STORAGE_KEYS = {
+    intra: 'YOUTH_BASEBALL_JJ_LIVE_INTRA_V5',
+    external: 'YOUTH_BASEBALL_JJ_LIVE_EXT_V5'
+};
 const LIVE_GAME_STORAGE_KEY = 'YOUTH_BASEBALL_JJ_LIVE_V5';
 
 class LiveScorebook {
     constructor() {
-        this.state = this.loadLiveState();
-        this.historyStack = [];
+        this.activeChannel = 'intra';
+        this.channels = {
+            intra: this.loadChannelState('intra'),
+            external: this.loadChannelState('external')
+        };
+        this.historyStacks = {
+            intra: [],
+            external: []
+        };
+        this.lastTimestamps = {
+            intra: 0,
+            external: 0
+        };
+    }
+
+    get state() {
+        return this.channels[this.activeChannel];
+    }
+
+    set state(val) {
+        this.channels[this.activeChannel] = val;
+    }
+
+    get historyStack() {
+        if (!this.historyStacks[this.activeChannel]) {
+            this.historyStacks[this.activeChannel] = [];
+        }
+        return this.historyStacks[this.activeChannel];
+    }
+
+    setChannel(channel) {
+        if (channel !== 'intra' && channel !== 'external') channel = 'intra';
+        this.activeChannel = channel;
+        return this.state;
     }
 
     normalizeState(st) {
@@ -38,9 +74,20 @@ class LiveScorebook {
         return st;
     }
 
-    loadLiveState() {
+    loadChannelState(channel) {
         try {
-            const raw = localStorage.getItem(LIVE_GAME_STORAGE_KEY) || localStorage.getItem('YOUTH_BASEBALL_JJ_LIVE_V3');
+            const key = LIVE_STORAGE_KEYS[channel];
+            let raw = localStorage.getItem(key);
+            // 向後相容：若該頻道無快取，嘗試自舊版單一 key 讀取並遷移
+            if (!raw) {
+                const legacy = localStorage.getItem(LIVE_GAME_STORAGE_KEY) || localStorage.getItem('YOUTH_BASEBALL_JJ_LIVE_V3');
+                if (legacy) {
+                    const parsed = JSON.parse(legacy);
+                    if (parsed && Boolean(parsed.isExternal) === (channel === 'external')) {
+                        raw = legacy;
+                    }
+                }
+            }
             if (raw) {
                 const parsed = JSON.parse(raw);
                 if (parsed && parsed.awayTeamId && parsed.homeTeamId) return this.normalizeState(parsed);
@@ -49,32 +96,52 @@ class LiveScorebook {
         return null;
     }
 
-    async saveLiveState(syncServer = true) {
+    loadLiveState() {
+        return this.loadChannelState(this.activeChannel);
+    }
+
+    async saveLiveState(syncServer = true, targetChannel = this.activeChannel) {
+        const curState = this.channels[targetChannel];
+        const key = LIVE_STORAGE_KEYS[targetChannel];
         try {
-            if (this.state) {
-                localStorage.setItem(LIVE_GAME_STORAGE_KEY, JSON.stringify(this.state));
+            if (curState) {
+                localStorage.setItem(key, JSON.stringify(curState));
             } else {
-                localStorage.removeItem(LIVE_GAME_STORAGE_KEY);
+                localStorage.removeItem(key);
             }
         } catch (e) {}
 
         if (syncServer && window.store) {
-            this.lastLiveTimestamp = Date.now();
+            const now = Date.now();
+            this.lastTimestamps[targetChannel] = now;
+            this.lastLiveTimestamp = now;
+
+            // 1. Firebase 雙頻道獨立節點儲存 (/jj_baseball/live_intra.json & /jj_baseball/live_external.json)
             if (window.store.firebaseDbUrl) {
                 try {
-                    await fetch(`${window.store.firebaseDbUrl}/jj_baseball/live_game.json`, {
+                    await fetch(`${window.store.firebaseDbUrl}/jj_baseball/live_${targetChannel}.json`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ _updatedAt: this.lastLiveTimestamp, state: this.state })
+                        body: JSON.stringify({ _updatedAt: now, state: curState })
                     });
+                    // 同步寫入向後相容節點 live_game.json（僅在此頻道進行中或更新時）
+                    if (curState) {
+                        await fetch(`${window.store.firebaseDbUrl}/jj_baseball/live_game.json`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ _updatedAt: now, state: curState })
+                        });
+                    }
                 } catch (e) {}
             }
+
+            // 2. 本機 Node.js 伺服器雙頻道儲存
             if (window.store.serverAvailable) {
                 try {
                     await fetch('/api/live', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ liveState: this.state })
+                        body: JSON.stringify({ channel: targetChannel, liveState: curState })
                     });
                 } catch (e) {}
             }
@@ -83,23 +150,40 @@ class LiveScorebook {
 
     pushHistory() {
         if (!this.state) return;
-        this.historyStack.push(JSON.parse(JSON.stringify(this.state)));
-        if (this.historyStack.length > 35) {
-            this.historyStack.shift();
+        const stack = this.historyStack;
+        stack.push(JSON.parse(JSON.stringify(this.state)));
+        if (stack.length > 35) {
+            stack.shift();
         }
     }
 
     undo() {
-        if (this.historyStack.length === 0) return false;
-        this.state = this.historyStack.pop();
+        const stack = this.historyStack;
+        if (stack.length === 0) return false;
+        this.state = stack.pop();
         this.saveLiveState();
         return true;
+    }
+
+    cancelLiveGame(targetChannel = this.activeChannel) {
+        this.channels[targetChannel] = null;
+        if (this.historyStacks[targetChannel]) {
+            this.historyStacks[targetChannel] = [];
+        }
+        try {
+            localStorage.removeItem(LIVE_STORAGE_KEYS[targetChannel]);
+        } catch (e) {}
+        this.saveLiveState(true, targetChannel);
     }
 
     /**
      * 開啟新比賽（預設 4 局制 ＋ 同隊投手投球制）
      */
     startNewGame(config) {
+        const isExternal = Boolean(config.isExternal);
+        const channel = isExternal ? 'external' : 'intra';
+        this.activeChannel = channel;
+
         const maxInnings = Number(config.innings) || 4;
         const sameTeamPitcher = config.sameTeamPitcher !== undefined ? Boolean(config.sameTeamPitcher) : true;
         const awayTeamId = config.awayTeamId;
@@ -128,12 +212,13 @@ class LiveScorebook {
         const awayTeam = window.store.getTeam(awayTeamId);
         const homeTeam = window.store.getTeam(homeTeamId);
 
-        this.historyStack = [];
-        this.state = {
+        this.historyStacks[channel] = [];
+        this.channels[channel] = {
             id: 'g_' + Date.now(),
             date: config.date || new Date().toISOString().slice(0, 10),
-            tournament: config.tournament || '隊內三隊爭霸練習賽 (4局制)',
-            isExternal: Boolean(config.isExternal),
+            tournament: config.tournament || (isExternal ? '對外友誼賽 / 盃賽' : '隊內三隊爭霸練習賽 (4局制)'),
+            isExternal,
+            channel,
             opponentName: config.opponentName || '',
             awayTeamId,
             homeTeamId,
@@ -171,8 +256,8 @@ class LiveScorebook {
             playByPlay: []
         };
 
-        this.saveLiveState();
-        return this.state;
+        this.saveLiveState(true, channel);
+        return this.channels[channel];
     }
 
     createEmptyBatterLine(playerId, teamId) {
@@ -641,7 +726,8 @@ class LiveScorebook {
     }
 
     finalizeGame(decisions = {}, fallbackState = null) {
-        const rawSt = this.state || fallbackState;
+        const targetChannel = this.activeChannel;
+        const rawSt = this.channels[targetChannel] || fallbackState;
         if (!rawSt) return null;
         const st = this.normalizeState(rawSt);
 
@@ -699,15 +785,17 @@ class LiveScorebook {
         }
         window.store.data.games.unshift(finishedGame);
 
-        this.state = null;
-        this.historyStack = [];
+        this.channels[targetChannel] = null;
+        if (this.historyStacks[targetChannel]) {
+            this.historyStacks[targetChannel] = [];
+        }
         try {
-            localStorage.removeItem('YOUTH_BASEBALL_JJ_LIVE_V3');
+            localStorage.removeItem(LIVE_STORAGE_KEYS[targetChannel]);
             localStorage.removeItem('YOUTH_BASEBALL_JJ_LIVE_V5');
         } catch (e) {}
 
         window.store.save();
-        this.saveLiveState();
+        this.saveLiveState(true, targetChannel);
         return finishedGame;
     }
 }

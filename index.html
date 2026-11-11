@@ -124,6 +124,18 @@
              分頁 2：三隊雙邊對戰實戰電子計分本 (Dual-Team Live Scorebook)
              ============================================================== -->
         <section id="view-scorebook" class="tab-view">
+            <!-- 雙頻道實戰計分本切換器（校內三隊賽 ⇄ 對外代表隊） -->
+            <div class="channel-switch-bar" style="margin-bottom:16px;">
+                <button type="button" id="sb-channel-btn-intra" class="channel-pill active" onclick="app.switchScorebookChannel('intra')">
+                    <span id="sb-dot-intra" class="channel-status-dot"></span>
+                    <span id="sb-label-intra">🏟️ 校內比賽計分本</span>
+                </button>
+                <button type="button" id="sb-channel-btn-external" class="channel-pill channel-ext" onclick="app.switchScorebookChannel('external')">
+                    <span id="sb-dot-external" class="channel-status-dot"></span>
+                    <span id="sb-label-external">🌏 對外比賽計分本</span>
+                </button>
+            </div>
+
             <!-- A. 開新比賽設定面板 (支援隊內三隊練習賽 & 對外正式比賽實戰/事後逐球重播補打) -->
             <div id="scorebook-setup-panel" class="stats-table-card" style="padding:22px;">
                 <div class="section-toolbar">

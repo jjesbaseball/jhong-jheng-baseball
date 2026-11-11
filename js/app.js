@@ -92,7 +92,8 @@ class BaseballApp {
 
         const liveDot = document.getElementById('nav-live-dot');
         if (liveDot) {
-            liveDot.style.display = window.scorebook.state ? 'inline-block' : 'none';
+            const isAnyLive = Boolean(window.scorebook?.channels?.intra || window.scorebook?.channels?.external || window.scorebook?.state);
+            liveDot.style.display = isAnyLive ? 'inline-block' : 'none';
         }
 
         // 更新英雄橫幅的「隊內 vs 對外」模式切換膠囊按鈕與標題
@@ -622,15 +623,66 @@ class BaseballApp {
     /* ======================================================================
        2. 三隊雙邊對戰實戰計分本 (Dual-Team Live Scorebook View)
        ====================================================================== */
+    switchScorebookChannel(ch) {
+        if (!window.scorebook) return;
+        window.scorebook.setChannel(ch);
+        this.setupGameType = ch;
+        this.renderScorebookView();
+        this.renderHeaderBrand();
+    }
+
+    renderScorebookChannelTabs() {
+        if (!window.scorebook) return;
+        const activeCh = window.scorebook.activeChannel || 'intra';
+        const intra = window.scorebook.channels?.intra;
+        const ext = window.scorebook.channels?.external;
+
+        const btnIntra = document.getElementById('sb-channel-btn-intra');
+        const dotIntra = document.getElementById('sb-channel-dot-intra');
+        const labelIntra = document.getElementById('sb-channel-label-intra');
+
+        const btnExt = document.getElementById('sb-channel-btn-external');
+        const dotExt = document.getElementById('sb-channel-dot-external');
+        const labelExt = document.getElementById('sb-channel-label-external');
+
+        if (btnIntra && dotIntra && labelIntra) {
+            btnIntra.classList.toggle('active', activeCh === 'intra');
+            dotIntra.classList.toggle('live', Boolean(intra));
+            if (intra) {
+                labelIntra.textContent = `🏟️ 校內比賽計分 (進行中 ${intra.awayScore}:${intra.homeScore})`;
+            } else {
+                labelIntra.textContent = '🏟️ 校內比賽計分本';
+            }
+        }
+
+        if (btnExt && dotExt && labelExt) {
+            btnExt.classList.toggle('active', activeCh === 'external');
+            btnExt.classList.toggle('channel-ext', true);
+            dotExt.classList.toggle('live', Boolean(ext));
+            if (ext) {
+                labelExt.textContent = `🌏 對外比賽計分 (進行中 ${ext.awayScore}:${ext.homeScore})`;
+            } else {
+                labelExt.textContent = '🌏 對外比賽計分本';
+            }
+        }
+    }
+
     renderScorebookView() {
+        this.renderScorebookChannelTabs();
+
         const setupPanel = document.getElementById('scorebook-setup-panel');
         const livePanel = document.getElementById('scorebook-live-panel');
         if (!setupPanel || !livePanel) return;
 
-        const st = window.scorebook.state;
+        const activeCh = window.scorebook ? window.scorebook.activeChannel : 'intra';
+        const st = window.scorebook ? window.scorebook.channels[activeCh] : null;
+
         if (!st) {
             setupPanel.style.display = 'block';
             livePanel.style.display = 'none';
+            // 同步切換開賽設定表單的遊戲類型 (校內三隊 vs 對外賽)
+            this.setupGameType = activeCh;
+            this.setSetupGameType(activeCh);
             this.renderNewGameSetupForm();
         } else {
             setupPanel.style.display = 'none';
@@ -1066,20 +1118,24 @@ class BaseballApp {
         }
     }
 
-    shareParentLiveLink() {
+    shareParentLiveLink(targetChannel) {
+        const ch = targetChannel || (window.scorebook ? window.scorebook.activeChannel : 'intra');
         const base = window.location.href.split('?')[0].split('#')[0].replace(/\/index\.html$/i, '/');
         const dir = base.endsWith('/') ? base : base.substring(0, base.lastIndexOf('/') + 1);
         const fbUrl = window.store ? window.store.firebaseDbUrl : '';
-        const liveUrl = `${dir}live.html${fbUrl ? '?fb=' + encodeURIComponent(fbUrl) : ''}`;
+        const chParam = `channel=${ch}`;
+        const fbParam = fbUrl ? `&fb=${encodeURIComponent(fbUrl)}` : '';
+        const liveUrl = `${dir}live.html?${chParam}${fbParam}`;
 
+        const chName = (ch === 'external') ? '🌏 對外代表隊比賽' : '🏟️ 校內三隊爭霸賽';
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(liveUrl).then(() => {
-                alert(`📺 家長專屬即時觀賽連結已複製！\n\n${liveUrl}\n\n（可直接貼到家長 LINE 群組，家長只能觀看球場實況與文字播報，無法修改紀錄）`);
+                alert(`📺 家長專屬【${chName}】即時觀賽連結已複製！\n\n${liveUrl}\n\n（可直接貼到家長 LINE 群組，家長點開即直達該賽事實況轉播，無法修改紀錄）`);
             }).catch(() => {
-                prompt('請複製以下家長專屬觀賽連結傳至 LINE 群組：', liveUrl);
+                prompt(`請複製以下家長專屬【${chName}】觀賽連結傳至 LINE 群組：`, liveUrl);
             });
         } else {
-            prompt('請複製以下家長專屬觀賽連結傳至 LINE 群組：', liveUrl);
+            prompt(`請複製以下家長專屬【${chName}】觀賽連結傳至 LINE 群組：`, liveUrl);
         }
     }
 
@@ -1806,9 +1862,15 @@ class BaseballApp {
     }
 
     cancelLiveGame() {
-        if (!confirm('確定要放棄目前正在記錄中的比賽嗎？')) return;
-        window.scorebook.state = null;
-        window.scorebook.saveLiveState();
+        const activeCh = window.scorebook ? window.scorebook.activeChannel : 'intra';
+        const chName = (activeCh === 'external') ? '【🌏 對外代表隊比賽】' : '【🏟️ 校內比賽】';
+        if (!confirm(`確定要放棄目前正在記錄中的 ${chName} 嗎？\n此動作僅會清除該頻道的暫存，另一頻道的比賽不會受到影響。`)) return;
+        if (window.scorebook && typeof window.scorebook.cancelLiveGame === 'function') {
+            window.scorebook.cancelLiveGame(activeCh);
+        } else {
+            window.scorebook.state = null;
+            window.scorebook.saveLiveState();
+        }
         this.refreshAll();
     }
 

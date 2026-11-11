@@ -91,6 +91,18 @@
 
     <main class="parent-live-container">
 
+        <!-- 雙頻道即時觀賽切換器（校內三隊爭霸 ⇄ 對外代表隊） -->
+        <div class="channel-switch-bar" style="margin-bottom:14px;">
+            <button type="button" id="channel-btn-intra" class="channel-pill active" onclick="liveViewer.switchChannel('intra')">
+                <span id="channel-dot-intra" class="channel-status-dot"></span>
+                <span id="channel-label-intra">🏟️ 校內三隊爭霸實況</span>
+            </button>
+            <button type="button" id="channel-btn-external" class="channel-pill channel-ext" onclick="liveViewer.switchChannel('external')">
+                <span id="channel-dot-external" class="channel-status-dot"></span>
+                <span id="channel-label-external">🌏 對外代表隊實況</span>
+            </button>
+        </div>
+
         <!-- 頂部狀態橫幅 -->
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
             <div id="viewer-live-badge" class="live-status-pill">

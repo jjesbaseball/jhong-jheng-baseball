@@ -303,14 +303,47 @@ class DataStore {
                     if (window.app) window.app.refreshAll();
                 }
 
-                if (window.scorebook && root.live_game !== undefined) {
-                    const cloudLive = root.live_game ? root.live_game.state : null;
-                    const cloudLiveTs = root.live_game ? (root.live_game._updatedAt || 0) : 0;
-                    if (cloudLiveTs > (window.scorebook.lastLiveTimestamp || 0)) {
-                        window.scorebook.lastLiveTimestamp = cloudLiveTs;
-                        window.scorebook.state = cloudLive ? window.scorebook.normalizeState(cloudLive) : null;
-                        window.scorebook.saveLiveState(false);
-                        if (window.app) window.app.refreshAll();
+                // 雙頻道即時比賽狀態同步 (校內 intra / 校外 external)
+                if (window.scorebook) {
+                    let updated = false;
+
+                    // 1. 校內頻道
+                    if (root.live_intra !== undefined) {
+                        const ts = root.live_intra?._updatedAt || 0;
+                        if (ts > (window.scorebook.lastTimestamps?.intra || 0)) {
+                            window.scorebook.lastTimestamps.intra = ts;
+                            window.scorebook.channels.intra = root.live_intra?.state ? window.scorebook.normalizeState(root.live_intra.state) : null;
+                            window.scorebook.saveLiveState(false, 'intra');
+                            updated = true;
+                        }
+                    }
+
+                    // 2. 校外頻道
+                    if (root.live_external !== undefined) {
+                        const ts = root.live_external?._updatedAt || 0;
+                        if (ts > (window.scorebook.lastTimestamps?.external || 0)) {
+                            window.scorebook.lastTimestamps.external = ts;
+                            window.scorebook.channels.external = root.live_external?.state ? window.scorebook.normalizeState(root.live_external.state) : null;
+                            window.scorebook.saveLiveState(false, 'external');
+                            updated = true;
+                        }
+                    }
+
+                    // 3. 向後相容單一 live_game
+                    if (root.live_intra === undefined && root.live_external === undefined && root.live_game !== undefined) {
+                        const cloudLive = root.live_game ? root.live_game.state : null;
+                        const cloudLiveTs = root.live_game ? (root.live_game._updatedAt || 0) : 0;
+                        if (cloudLiveTs > (window.scorebook.lastLiveTimestamp || 0)) {
+                            window.scorebook.lastLiveTimestamp = cloudLiveTs;
+                            const ch = cloudLive?.isExternal ? 'external' : 'intra';
+                            window.scorebook.channels[ch] = cloudLive ? window.scorebook.normalizeState(cloudLive) : null;
+                            window.scorebook.saveLiveState(false, ch);
+                            updated = true;
+                        }
+                    }
+
+                    if (updated && window.app) {
+                        window.app.refreshAll();
                     }
                 }
             } catch (e) {}
@@ -350,9 +383,20 @@ class DataStore {
                         this.saveLocal(this.data);
                         if (window.app) window.app.refreshAll();
                     } else if (msg.type === 'live_updated' && window.scorebook) {
-                        window.scorebook.state = msg.liveState ? window.scorebook.normalizeState(msg.liveState) : null;
-                        window.scorebook.saveLiveState(false);
+                        const ch = msg.channel || (msg.liveState?.isExternal ? 'external' : 'intra');
+                        window.scorebook.channels[ch] = msg.liveState ? window.scorebook.normalizeState(msg.liveState) : null;
+                        window.scorebook.saveLiveState(false, ch);
                         if (window.app) window.app.refreshAll();
+                    } else if (msg.type === 'connected' && window.scorebook) {
+                        if (msg.liveGames) {
+                            if (msg.liveGames.intra !== undefined) {
+                                window.scorebook.channels.intra = msg.liveGames.intra ? window.scorebook.normalizeState(msg.liveGames.intra) : null;
+                            }
+                            if (msg.liveGames.external !== undefined) {
+                                window.scorebook.channels.external = msg.liveGames.external ? window.scorebook.normalizeState(msg.liveGames.external) : null;
+                            }
+                            if (window.app) window.app.refreshAll();
+                        }
                     }
                 } catch (err) {}
             };

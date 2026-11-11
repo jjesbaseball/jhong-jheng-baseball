@@ -5,11 +5,26 @@
 
 class ParentLiveViewer {
     constructor() {
-        this.liveState = null;
-        this.lastSeenPlayKey = null;
+        this.activeChannel = 'intra'; // 'intra' | 'external'
+        this.channels = {
+            intra: null,
+            external: null
+        };
+        this.lastSeenPlayKeys = {
+            intra: null,
+            external: null
+        };
         this.voiceEnabled = false;
         this._hrAnimId = null;
         this._hrHideTimer = null;
+    }
+
+    get liveState() {
+        return this.channels[this.activeChannel];
+    }
+
+    set liveState(val) {
+        this.channels[this.activeChannel] = val;
     }
 
     init() {
@@ -20,19 +35,91 @@ class ParentLiveViewer {
             window.store.setFirebaseUrl(fbParam);
         }
 
-        // 先讀取本機是否有進行中比賽
+        // 支援網址參數 ?channel= 或 ?ch= 指定直接開啟「校內 (intra)」或「對外 (external)」頻道
+        const chParam = (params.get('channel') || params.get('ch') || '').toLowerCase();
+        if (chParam === 'external' || chParam === 'ext') {
+            this.activeChannel = 'external';
+        } else if (chParam === 'intra') {
+            this.activeChannel = 'intra';
+        }
+
+        // 讀取本機各頻道快照
         try {
-            const localRaw = localStorage.getItem('YOUTH_BASEBALL_JJ_LIVE_V5') || localStorage.getItem('YOUTH_BASEBALL_JJ_LIVE_V3');
-            if (localRaw) {
-                const parsed = JSON.parse(localRaw);
+            const rawIntra = localStorage.getItem('YOUTH_BASEBALL_JJ_LIVE_INTRA_V5') || localStorage.getItem('YOUTH_BASEBALL_JJ_LIVE_V5') || localStorage.getItem('YOUTH_BASEBALL_JJ_LIVE_V3');
+            if (rawIntra) {
+                const parsed = JSON.parse(rawIntra);
                 if (parsed && parsed.awayTeamId && parsed.homeTeamId) {
-                    this.liveState = this.normalizeState(parsed);
+                    this.channels.intra = this.normalizeState(parsed);
                 }
             }
         } catch (e) {}
 
+        try {
+            const rawExt = localStorage.getItem('YOUTH_BASEBALL_JJ_LIVE_EXT_V5');
+            if (rawExt) {
+                const parsed = JSON.parse(rawExt);
+                if (parsed && parsed.awayTeamId && parsed.homeTeamId) {
+                    this.channels.external = this.normalizeState(parsed);
+                }
+            }
+        } catch (e) {}
+
+        // 若未帶參數且校內沒在打、但對外賽正在打，自動優先切到對外頻道
+        if (!chParam && !this.channels.intra && this.channels.external) {
+            this.activeChannel = 'external';
+        }
+
+        // 綁定雙頻道切換按鈕
+        document.getElementById('channel-btn-intra')?.addEventListener('click', () => this.switchChannel('intra'));
+        document.getElementById('channel-btn-external')?.addEventListener('click', () => this.switchChannel('external'));
+
         this.render();
         this.startRealtimeSync();
+    }
+
+    switchChannel(ch) {
+        if (ch !== 'intra' && ch !== 'external') return;
+        this.activeChannel = ch;
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.set('channel', ch);
+            window.history.replaceState(null, '', url.toString());
+        } catch (e) {}
+        this.render();
+    }
+
+    renderChannelTabs() {
+        const btnIntra = document.getElementById('channel-btn-intra');
+        const dotIntra = document.getElementById('channel-dot-intra');
+        const labelIntra = document.getElementById('channel-label-intra');
+
+        const btnExt = document.getElementById('channel-btn-external');
+        const dotExt = document.getElementById('channel-dot-external');
+        const labelExt = document.getElementById('channel-label-external');
+
+        const intra = this.channels.intra;
+        const ext = this.channels.external;
+
+        if (btnIntra && dotIntra && labelIntra) {
+            btnIntra.classList.toggle('active', this.activeChannel === 'intra');
+            dotIntra.classList.toggle('live', Boolean(intra));
+            if (intra) {
+                labelIntra.textContent = `🏟️ 校內實況 (${intra.awayScore}:${intra.homeScore})`;
+            } else {
+                labelIntra.textContent = '🏟️ 校內賽實況';
+            }
+        }
+
+        if (btnExt && dotExt && labelExt) {
+            btnExt.classList.toggle('active', this.activeChannel === 'external');
+            btnExt.classList.toggle('channel-ext', true);
+            dotExt.classList.toggle('live', Boolean(ext));
+            if (ext) {
+                labelExt.textContent = `🌏 對外代表隊 (${ext.awayScore}:${ext.homeScore})`;
+            } else {
+                labelExt.textContent = '🌏 對外代表隊';
+            }
+        }
     }
 
     normalizeState(st) {
@@ -67,8 +154,24 @@ class ParentLiveViewer {
                 sse.onmessage = (ev) => {
                     try {
                         const msg = JSON.parse(ev.data);
-                        if (msg.type === 'connected' || msg.type === 'live_updated') {
-                            this.applyIncomingState(msg.liveState);
+                        if (msg.type === 'connected') {
+                            if (msg.liveGames) {
+                                this.applyIncomingChannelState('intra', msg.liveGames.intra);
+                                this.applyIncomingChannelState('external', msg.liveGames.external);
+                            } else if (msg.liveState) {
+                                const ch = msg.liveState.isExternal ? 'external' : 'intra';
+                                this.applyIncomingChannelState(ch, msg.liveState);
+                            }
+                        } else if (msg.type === 'live_updated') {
+                            if (msg.liveGames) {
+                                this.applyIncomingChannelState('intra', msg.liveGames.intra);
+                                this.applyIncomingChannelState('external', msg.liveGames.external);
+                            } else if (msg.channel) {
+                                this.applyIncomingChannelState(msg.channel, msg.liveState);
+                            } else if (msg.liveState) {
+                                const ch = msg.liveState.isExternal ? 'external' : 'intra';
+                                this.applyIncomingChannelState(ch, msg.liveState);
+                            }
                         } else if (msg.type === 'data_updated' && msg.data && window.store) {
                             window.store.data = window.store.normalizeData(msg.data);
                             this.render();
@@ -93,33 +196,57 @@ class ParentLiveViewer {
             if (root && root.league_data && window.store) {
                 window.store.data = window.store.normalizeData(root.league_data);
             }
-            const cloudLive = (root && root.live_game && root.live_game.state) ? root.live_game.state : null;
-            this.applyIncomingState(cloudLive);
+
+            // 雙頻道獨立更新
+            let intraCloud = (root && root.live_intra && root.live_intra.state) ? root.live_intra.state : null;
+            let extCloud = (root && root.live_external && root.live_external.state) ? root.live_external.state : null;
+
+            // 向下相容 legacy live_game
+            if (!intraCloud && !extCloud && root && root.live_game && root.live_game.state) {
+                const legacy = root.live_game.state;
+                if (legacy.isExternal) {
+                    extCloud = legacy;
+                } else {
+                    intraCloud = legacy;
+                }
+            }
+
+            this.applyIncomingChannelState('intra', intraCloud);
+            this.applyIncomingChannelState('external', extCloud);
 
             const subEl = document.getElementById('viewer-sync-subtitle');
-            if (subEl) subEl.textContent = '🔥 已連線雲端即時轉播（每 2 秒自動更新球場實況）';
+            if (subEl) subEl.textContent = '🔥 已連線雲端雙頻道轉播（每 2 秒自動同步球場實況）';
         } catch (e) {}
     }
 
     applyIncomingState(rawState) {
+        const ch = (rawState && rawState.isExternal) ? 'external' : this.activeChannel;
+        this.applyIncomingChannelState(ch, rawState);
+    }
+
+    applyIncomingChannelState(channel, rawState) {
+        const ch = (channel === 'external') ? 'external' : 'intra';
         const normalized = rawState ? this.normalizeState(rawState) : null;
 
-        // 檢查是否有最新一筆文字播報進入
-        if (normalized && normalized.playByPlay && normalized.playByPlay.length > 0) {
-            const topPlay = normalized.playByPlay[0];
-            const playKey = `${normalized.id}_${normalized.playByPlay.length}_${topPlay.text}`;
-            const isFirstLoad = (this.lastSeenPlayKey === null);
-            if (this.lastSeenPlayKey !== playKey) {
-                this.lastSeenPlayKey = playKey;
-                if (!isFirstLoad) {
-                    this.onNewPlayArrived(topPlay);
+        // 若該頻道剛好是目前家長正在觀看的頻道，比對最新播報與全壘打動畫
+        if (ch === this.activeChannel) {
+            if (normalized && normalized.playByPlay && normalized.playByPlay.length > 0) {
+                const topPlay = normalized.playByPlay[0];
+                const playKey = `${normalized.id}_${normalized.playByPlay.length}_${topPlay.text}`;
+                const isFirstLoad = (this.lastSeenPlayKeys[ch] === null);
+                if (this.lastSeenPlayKeys[ch] !== playKey) {
+                    this.lastSeenPlayKeys[ch] = playKey;
+                    if (!isFirstLoad) {
+                        this.onNewPlayArrived(topPlay);
+                    }
                 }
+            } else if (!normalized) {
+                this.lastSeenPlayKeys[ch] = null;
             }
-        } else if (!normalized) {
-            this.lastSeenPlayKey = null;
         }
 
-        this.liveState = normalized;
+        this.channels[ch] = normalized;
+
         const timeEl = document.getElementById('viewer-last-update');
         if (timeEl) {
             timeEl.textContent = `最後同步：${new Date().toLocaleTimeString('zh-TW')}`;
@@ -362,34 +489,37 @@ class ParentLiveViewer {
     }
 
     render() {
-        const st = this.liveState;
+        this.renderChannelTabs();
+        const ch = this.activeChannel;
+        const st = this.channels[ch];
         const badgeEl = document.getElementById('viewer-live-badge');
 
         if (st) {
             if (badgeEl) {
                 badgeEl.className = 'live-status-pill';
-                badgeEl.innerHTML = `<span class="live-dot"></span><span>LIVE 比賽即時轉播中</span>`;
+                const chName = (ch === 'external') ? '🌏 對外代表隊' : '🏟️ 校內賽';
+                badgeEl.innerHTML = `<span class="live-dot"></span><span>LIVE 【${chName}】即時轉播中</span>`;
             }
             this.renderActiveGame(st, true);
             return;
         }
 
-        // 若目前無進行中比賽，顯示最近一場完賽紀錄回顧
-        const lastGame = (window.store && Array.isArray(window.store.data.games) && window.store.data.games.length > 0)
-            ? window.store.data.games[0]
-            : null;
+        // 若該頻道目前無進行中比賽，尋找該頻道最近一場完賽紀錄回顧
+        const allGames = (window.store && Array.isArray(window.store.data.games)) ? window.store.data.games : [];
+        const lastGame = allGames.find(g => (ch === 'external') ? Boolean(g.isExternal) : !g.isExternal) || null;
 
         if (badgeEl) {
             badgeEl.className = 'live-status-pill standby';
+            const chName = (ch === 'external') ? '對外代表隊' : '校內聯賽';
             badgeEl.innerHTML = lastGame
-                ? `<span>🏁 目前無進行中賽事（顯示最新完賽結果）</span>`
-                : `<span>⚾ 等待開賽中（球場開賽後將自動同步畫面）</span>`;
+                ? `<span>🏁 【${chName}】目前無進行中賽事（顯示最新完賽結果）</span>`
+                : `<span>⚾ 【${chName}】等待開賽中（球場開賽後將自動同步）</span>`;
         }
 
         if (lastGame) {
             this.renderFinishedGameReplay(lastGame);
         } else {
-            this.renderStandbyEmpty();
+            this.renderStandbyEmpty(ch);
         }
     }
 
@@ -623,19 +753,21 @@ class ParentLiveViewer {
         }
     }
 
-    renderStandbyEmpty() {
-        document.getElementById('viewer-tournament-title').textContent = '中正國小少棒隊 隊內三隊爭霸聯賽';
+    renderStandbyEmpty(channel) {
+        const isExt = (channel === 'external');
+        document.getElementById('viewer-tournament-title').textContent = isExt
+            ? '中正國小少棒代表隊 ‧ 對外正式/友誼賽'
+            : '中正國小少棒隊 ‧ 隊內三隊爭霸聯賽';
         document.getElementById('viewer-inning-badge').textContent = '尚未開賽';
-        document.getElementById('viewer-linescore-table').innerHTML = `
-            <thead><tr><th class="team-col">對戰隊伍</th><th>1</th><th>2</th><th>3</th><th>4</th><th class="rhe-col">R</th><th class="rhe-col">H</th><th class="rhe-col">E</th></tr></thead>
-            <tbody>
-                <tr><td class="team-col">🔴 紅隊 / 🔵 藍隊 / ⚪ 白隊</td><td>-</td><td>-</td><td>-</td><td>-</td><td class="rhe-col">0</td><td>0</td><td>0</td></tr>
-            </tbody>
-        `;
-        document.getElementById('viewer-latest-play-text').textContent = '目前尚無進行中的比賽，當紀錄員按下開賽後將自動同步畫面！';
+        document.getElementById('viewer-linescore-table').innerHTML = isExt
+            ? `<thead><tr><th class="team-col">對戰隊伍</th><th>1</th><th>2</th><th>3</th><th>4</th><th class="rhe-col">R</th><th class="rhe-col">H</th><th class="rhe-col">E</th></tr></thead>
+               <tbody><tr><td class="team-col">🦁 中正國小 (A隊) vs 外隊</td><td>-</td><td>-</td><td>-</td><td>-</td><td class="rhe-col">0</td><td>0</td><td>0</td></tr></tbody>`
+            : `<thead><tr><th class="team-col">對戰隊伍</th><th>1</th><th>2</th><th>3</th><th>4</th><th class="rhe-col">R</th><th class="rhe-col">H</th><th class="rhe-col">E</th></tr></thead>
+               <tbody><tr><td class="team-col">🔴 紅隊 / 🔵 藍隊 / ⚪ 白隊</td><td>-</td><td>-</td><td>-</td><td>-</td><td class="rhe-col">0</td><td>0</td><td>0</td></tr></tbody>`;
+        document.getElementById('viewer-latest-play-text').textContent = `【${isExt ? '對外代表隊' : '校內三隊'}】目前尚無進行中的比賽，當球場紀錄員按下開賽後將自動同步畫面！`;
         document.getElementById('viewer-matchup-info').innerHTML = `
             <div style="width:100%;text-align:center;color:var(--text-secondary);font-size:0.88rem;">
-                📡 轉播室待命連線中...
+                📡 ${isExt ? '🌏 對外賽' : '🏟️ 校內賽'}轉播頻道待命連線中...
             </div>
         `;
         document.getElementById('viewer-play-log').innerHTML = '<div style="color:var(--text-secondary);font-size:0.85rem;">等待比賽開始...</div>';
