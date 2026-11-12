@@ -19,7 +19,8 @@ class BaseballApp {
         this._hrAnimId = null;
         this._hrHideTimer = null;
         this.oppLineupMode = 'roster'; // 'roster' | 'quick'
-        this.setupOppOrder = []; // 外部對手先發打序
+        this.setupExtOrder = null; // 中正對外先發打序 (null 代表未初始化，[] 代表清空重排)
+        this.setupOppOrder = null; // 外部對手先發打序 (null 代表未初始化，[] 代表清空重排)
         this.oppModalCurrentTeam = ''; // 秩序冊名冊彈窗目前選中的學校
         this.pdfParsedTeams = []; // PDF 解析暫存隊伍
     }
@@ -826,13 +827,10 @@ class BaseballApp {
         if (this.setupGameType === 'external') {
             // 1. 中正國小少棒代表隊打序與投手
             const allPlayers = window.store.getPlayersByTeam('JJ');
-            if (forceReset || !Array.isArray(this.setupExtOrder) || this.setupExtOrder.length === 0) {
+            if (forceReset || !Array.isArray(this.setupExtOrder)) {
                 this.setupExtOrder = allPlayers.slice(0, 9).map(p => p.id);
             } else {
                 this.setupExtOrder = this.setupExtOrder.filter(id => allPlayers.some(p => p.id === id));
-                if (this.setupExtOrder.length === 0 && allPlayers.length > 0) {
-                    this.setupExtOrder = allPlayers.slice(0, 9).map(p => p.id);
-                }
             }
             const extSpSel = document.getElementById('setup-ext-jj-sp');
             if (extSpSel) {
@@ -848,20 +846,18 @@ class BaseballApp {
             this.renderSetupLineupBox('ext', allPlayers, this.setupExtOrder, 'setup-ext-jj-lineup-list');
 
             // 2. 外校對手學校打序與先發投手【彈性雙模式】
-            const oppName = document.getElementById('setup-opp-name')?.value.trim() || '桃園市龜山國小';
+            const oppName = document.getElementById('setup-opp-name')?.value.trim() || '外校對手';
             const oppBoxTitle = document.getElementById('setup-opp-box-title');
             if (oppBoxTitle) {
                 oppBoxTitle.textContent = `⚔️ ${oppName} — 本場先發投手 ＆ 先發打序`;
             }
 
             const oppPlayers = window.store.getOpponentPlayers ? window.store.getOpponentPlayers(oppName) : [];
-            if (forceReset || !Array.isArray(this.setupOppOrder) || this.setupOppOrder.length === 0) {
+            if (forceReset || this._lastSetupOppName !== oppName || !Array.isArray(this.setupOppOrder)) {
+                this._lastSetupOppName = oppName;
                 this.setupOppOrder = oppPlayers.slice(0, 9).map(p => p.id);
             } else {
                 this.setupOppOrder = this.setupOppOrder.filter(id => oppPlayers.some(p => p.id === id));
-                if (this.setupOppOrder.length === 0 && oppPlayers.length > 0) {
-                    this.setupOppOrder = oppPlayers.slice(0, 9).map(p => p.id);
-                }
             }
 
             const oppSpSel = document.getElementById('setup-ext-opp-sp');
