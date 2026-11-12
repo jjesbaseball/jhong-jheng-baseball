@@ -15,6 +15,15 @@ class ParentLiveViewer {
             external: null
         };
         this.voiceEnabled = false;
+        this.preferredVoiceURI = '';
+        try {
+            this.preferredVoiceURI = localStorage.getItem('JJ_PARENT_VOICE_URI') || '';
+        } catch (e) {}
+        this.speechRate = 1.0;
+        try {
+            this.speechRate = parseFloat(localStorage.getItem('JJ_PARENT_VOICE_RATE')) || 1.0;
+        } catch (e) {}
+        this.voiceSettingsOpen = false;
         this._hrAnimId = null;
         this._hrHideTimer = null;
     }
@@ -34,6 +43,9 @@ class ParentLiveViewer {
         if (fbParam && window.store) {
             window.store.setFirebaseUrl(fbParam);
         }
+
+        // 初始化語音列表
+        this.initSpeechVoices();
 
         // 支援網址參數 ?channel= 或 ?ch= 指定直接開啟「校內 (intra)」或「對外 (external)」頻道
         const chParam = (params.get('channel') || params.get('ch') || '').toLowerCase();
@@ -270,25 +282,20 @@ class ParentLiveViewer {
         }
     }
 
-    toggleVoice() {
-        this.voiceEnabled = !this.voiceEnabled;
-        const btn = document.getElementById('viewer-voice-btn');
-        if (btn) {
-            btn.textContent = this.voiceEnabled ? '🔊 語音轉播：開' : '🔇 語音轉播：關';
-            btn.style.borderColor = this.voiceEnabled ? 'var(--jj-gold)' : 'var(--border-color)';
-        }
-        if (!this.voiceEnabled && ('speechSynthesis' in window)) {
-            window.speechSynthesis.cancel();
+    initSpeechVoices() {
+        if (!('speechSynthesis' in window)) return;
+        this.populateVoiceDropdown();
+        if (window.speechSynthesis.onvoiceschanged !== undefined) {
+            window.speechSynthesis.onvoiceschanged = () => this.populateVoiceDropdown();
         }
     }
 
-    pickBestVoice() {
-        if (!('speechSynthesis' in window)) return null;
+    getScoredChineseVoices() {
+        if (!('speechSynthesis' in window)) return [];
         const all = window.speechSynthesis.getVoices() || [];
         const zhVoices = all.filter(v =>
             /zh|cmn|taiwan|chinese|國語|臺灣|台灣|美佳|meijia|hsiao|yunjhe|hanhan|zhiwei|yating/i.test(`${v.lang} ${v.name}`)
         );
-        if (zhVoices.length === 0) return null;
 
         const scoreVoice = (v) => {
             const s = `${v.name} ${v.lang}`;
@@ -308,7 +315,88 @@ class ParentLiveViewer {
             return score;
         };
 
-        return zhVoices.sort((a, b) => scoreVoice(b) - scoreVoice(a))[0];
+        return zhVoices.sort((a, b) => scoreVoice(b) - scoreVoice(a));
+    }
+
+    populateVoiceDropdown() {
+        const sel = document.getElementById('viewer-voice-select');
+        const rateSel = document.getElementById('viewer-voice-rate');
+        if (rateSel) {
+            rateSel.value = String(this.speechRate || 1.0);
+        }
+        if (!sel) return;
+        const voices = this.getScoredChineseVoices();
+        if (voices.length === 0) return;
+
+        const formatVoiceLabel = (v) => {
+            if (/YunJhe.*Natural/i.test(v.name)) return '🎙️ 台灣男主播 (雲哲 Natural 超擬真)';
+            if (/HsiaoChen.*Natural/i.test(v.name)) return '🎙️ 台灣女主播 (曉臻 Natural 超擬真)';
+            if (/HsiaoYu.*Natural/i.test(v.name)) return '🎙️ 台灣播報員 (曉雨 Natural 超擬真)';
+            if (/Google.*(國語|臺灣|台灣)/i.test(v.name)) return '🎙️ Google 台灣自然語音';
+            if (/Meijia|美佳/i.test(v.name)) return `🎙️ Apple 台灣語音 (${v.name})`;
+            const isNatural = /Natural|Online|Neural/i.test(v.name);
+            return `${isNatural ? '🌟 ' : ''}${v.name.replace(/Microsoft |Desktop |Online \(Natural\) - Chinese \(Taiwan\)/g, '').trim()} (${v.lang})`;
+        };
+
+        sel.innerHTML = `<option value="">⚡ 自動挑選最佳擬真主播 (${formatVoiceLabel(voices[0]).replace(/^🎙️ |^🌟 /, '')})</option>` +
+            voices.map(v => `<option value="${v.voiceURI}" ${v.voiceURI === this.preferredVoiceURI ? 'selected' : ''}>${formatVoiceLabel(v)}</option>`).join('');
+    }
+
+    toggleVoiceSettingsPanel() {
+        this.voiceSettingsOpen = !this.voiceSettingsOpen;
+        const panel = document.getElementById('viewer-voice-settings-panel');
+        if (panel) {
+            panel.style.display = this.voiceSettingsOpen ? 'block' : 'none';
+        }
+        if (this.voiceSettingsOpen) {
+            this.populateVoiceDropdown();
+        }
+    }
+
+    onVoiceSelectChange(uri) {
+        this.preferredVoiceURI = uri || '';
+        try {
+            localStorage.setItem('JJ_PARENT_VOICE_URI', this.preferredVoiceURI);
+        } catch (e) {}
+        this.speakText('曾聖壹，滾地出局', true);
+    }
+
+    onVoiceRateChange(rate) {
+        this.speechRate = parseFloat(rate) || 1.0;
+        try {
+            localStorage.setItem('JJ_PARENT_VOICE_RATE', String(this.speechRate));
+        } catch (e) {}
+        this.speakText('好球進壘', true);
+    }
+
+    testVoice() {
+        this.speakText('曾聖壹，安打跑回得分', true);
+    }
+
+    toggleVoice() {
+        this.voiceEnabled = !this.voiceEnabled;
+        const btn = document.getElementById('viewer-voice-btn');
+        if (btn) {
+            btn.textContent = this.voiceEnabled ? '🔊 語音轉播：開' : '🔇 語音轉播：關';
+            btn.style.borderColor = this.voiceEnabled ? 'var(--jj-gold)' : 'var(--border-color)';
+            btn.style.background = this.voiceEnabled ? 'rgba(203,176,99,0.2)' : '';
+        }
+        if (!this.voiceEnabled && ('speechSynthesis' in window)) {
+            window.speechSynthesis.cancel();
+        } else if (this.voiceEnabled) {
+            this.speakText('語音轉播已開啟', true);
+        }
+    }
+
+    pickBestVoice() {
+        if (!('speechSynthesis' in window)) return null;
+        const voices = this.getScoredChineseVoices();
+        if (voices.length === 0) return null;
+        if (this.preferredVoiceURI) {
+            const matched = voices.find(v => v.voiceURI === this.preferredVoiceURI || v.name === this.preferredVoiceURI);
+            if (matched) return matched;
+        }
+        return voices[0];
     }
 
     formatBaseballSpeechText(rawText) {
@@ -350,8 +438,8 @@ class ParentLiveViewer {
         return `${t}。`;
     }
 
-    speakText(text) {
-        if (!this.voiceEnabled || !('speechSynthesis' in window)) return;
+    speakText(text, forceTest = false) {
+        if ((!this.voiceEnabled && !forceTest) || !('speechSynthesis' in window)) return;
         try {
             window.speechSynthesis.cancel();
             const phoneticText = this.formatBaseballSpeechText(text);
@@ -363,7 +451,7 @@ class ParentLiveViewer {
             } else {
                 utter.lang = 'zh-TW';
             }
-            utter.rate = 1.0;
+            utter.rate = this.speechRate || 1.0;
             utter.pitch = 1.0;
             utter.volume = 1.0;
             window.speechSynthesis.speak(utter);

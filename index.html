@@ -162,13 +162,23 @@
 
                 <!-- 對外比賽專屬設定列（當選擇「對外正式/友誼賽」時顯示） -->
                 <div id="setup-external-fields" class="form-grid" style="display:none;margin-bottom:14px;padding:14px;background:rgba(56,189,248,0.1);border:1.5px solid #38bdf8;border-radius:12px;">
-                    <div class="form-group">
-                        <label style="color:#7dd3fc;font-weight:800;">⚔️ 外校對手學校名稱（必填）</label>
-                        <input type="text" id="setup-opp-name" class="form-control" placeholder="例如：復興國小、忠孝國小、東園國小" value="外校對手">
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px;">
+                            <label style="color:#7dd3fc;font-weight:800;margin:0;">⚔️ 外校對手學校與秩序冊名單</label>
+                            <button type="button" class="btn" style="padding:4px 12px;font-size:0.8rem;background:rgba(56,189,248,0.2);border-color:#38bdf8;color:#7dd3fc;font-weight:800;" onclick="app.openOpponentRosterModal()">
+                                📋 預錄/編輯對手秩序冊名單庫
+                            </button>
+                        </div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <select id="setup-opp-preset-select" class="form-control" style="flex:1;min-width:180px;" onchange="app.onOpponentPresetSelect(this.value)">
+                                <!-- 動態載入已預錄的學校 -->
+                            </select>
+                            <input type="text" id="setup-opp-name" class="form-control" style="flex:1;min-width:180px;" placeholder="外校對手學校名稱" value="外校對手" oninput="app.onOpponentNameInput(this.value)">
+                        </div>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" style="grid-column: 1 / -1;">
                         <label style="color:#7dd3fc;font-weight:800;">🦁 中正國小攻守順序</label>
-                        <select id="setup-jj-side" class="form-control">
+                        <select id="setup-jj-side" class="form-control" onchange="app.updateSetupTeamLineups()">
                             <option value="away" selected>🚩 中正國小先攻（客隊・上半局打擊）</option>
                             <option value="home">🏠 中正國小後攻（主隊・下半局打擊）</option>
                         </select>
@@ -239,15 +249,51 @@
 
                 <!-- A2. 對外比賽（🦁 中正國小代表隊）先發打序與先發投手設定區 -->
                 <div id="setup-external-lineup-box" style="display:none;margin-top:16px;background:var(--bg-secondary);padding:16px;border-radius:12px;border:1.5px solid var(--jj-gold);">
-                    <h3 style="color:var(--jj-gold-light);margin-bottom:10px;">🦁 中正國小少棒代表隊 — 本場對外先發投手 ＆ 先發打序（⭐ A隊主力優先置頂）</h3>
+                    <h3 style="color:var(--jj-gold-light);margin-bottom:10px;">🦁 中正國小少棒代表隊 — 本場先發投手 ＆ 先發打序（⭐ A隊主力優先置頂）</h3>
                     <div class="form-grid" style="margin-bottom:12px;">
                         <div class="form-group">
                             <label>⚾ 中正國小本場先發投手 (SP)</label>
                             <select id="setup-ext-jj-sp" class="form-control"></select>
                         </div>
                     </div>
-                    <label style="display:block;font-size:0.84rem;color:var(--text-secondary);margin-bottom:6px;">🔢 點擊下方球員排入本場對外先發打序（第 1 棒 ～ 第 N 棒）：</label>
+                    <label style="display:block;font-size:0.84rem;color:var(--text-secondary);margin-bottom:6px;">🔢 點擊下方球員排入中正先發打序（第 1 棒 ～ 第 N 棒）：</label>
                     <div id="setup-ext-jj-lineup-list" style="display:grid;gap:6px;"></div>
+                </div>
+
+                <!-- A3. 對外比賽（⚔️ 外校對手）先發投手 ＆ 先發打序設定區【彈性雙模式】 -->
+                <div id="setup-external-opp-box" style="display:none;margin-top:16px;background:var(--bg-secondary);padding:16px;border-radius:12px;border:1.5px solid #38bdf8;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+                        <h3 id="setup-opp-box-title" style="color:#7dd3fc;margin:0;">⚔️ 外校對手 — 本場先發投手 ＆ 先發打序</h3>
+                        <div style="display:flex;gap:6px;">
+                            <button type="button" id="btn-opp-mode-roster" class="btn active" style="padding:4px 12px;font-size:0.8rem;" onclick="app.toggleOpponentLineupMode('roster')">
+                                📋 秩序冊名單排打序 (推薦)
+                            </button>
+                            <button type="button" id="btn-opp-mode-quick" class="btn" style="padding:4px 12px;font-size:0.8rem;" onclick="app.toggleOpponentLineupMode('quick')">
+                                ⚡ 快速預設名單 (1~9棒自動生成)
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 模式 1：秩序冊排陣模式 -->
+                    <div id="opp-mode-roster-view">
+                        <div class="form-grid" style="margin-bottom:12px;">
+                            <div class="form-group">
+                                <label>⚾ 對手本場先發投手 (SP)</label>
+                                <select id="setup-ext-opp-sp" class="form-control"></select>
+                            </div>
+                        </div>
+                        <label style="display:block;font-size:0.84rem;color:var(--text-secondary);margin-bottom:6px;">🔢 點擊下方球員排入對手先發打序（第 1 棒 ～ 第 N 棒）：</label>
+                        <div id="setup-ext-opp-lineup-list" style="display:grid;gap:6px;"></div>
+                    </div>
+
+                    <!-- 模式 2：快速預設模式 -->
+                    <div id="opp-mode-quick-view" style="display:none;padding:14px;background:rgba(56,189,248,0.08);border-radius:8px;border:1px dashed #38bdf8;">
+                        <div style="color:#7dd3fc;font-weight:800;font-size:0.92rem;margin-bottom:6px;">⚡ 免秩序冊・快速開賽模式</div>
+                        <p style="font-size:0.84rem;color:var(--text-secondary);margin:0 0 6px 0;line-height:1.5;">
+                            已啟用快速預設：對手先發投手預設為 <strong>#1 先發投手</strong>，打序預設為 <strong>#1 第1棒 ～ #9 第9棒</strong>。<br>
+                            比賽進行中，隨時可在記分板點擊打者/投手進行<strong>即時補填姓名背號</strong>或更換打者。
+                        </p>
+                    </div>
                 </div>
 
                 <div style="margin-top:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
@@ -665,6 +711,132 @@
         </button>
     </nav>
 
+    <!-- 對手秩序冊名單庫管理 Modal -->
+    <div id="opponent-roster-modal" class="modal-backdrop" onclick="if(event.target===this)app.closeModal('opponent-roster-modal')">
+        <div class="modal-panel" style="max-width:920px;">
+            <div class="modal-header">
+                <h3 style="color:#7dd3fc;font-size:1.15rem;margin:0;display:flex;align-items:center;gap:6px;">
+                    📋 對手學校秩序冊名單庫管理
+                </h3>
+                <button type="button" class="btn" style="padding:4px 10px;" onclick="app.closeModal('opponent-roster-modal')">✕ 關閉</button>
+            </div>
+
+            <!-- 頂部：秩序冊相片 (JPG) / PDF 自動智慧抓取區 -->
+            <div style="background:rgba(56,189,248,0.12);border:1.5px solid #38bdf8;border-radius:12px;padding:14px;margin-bottom:14px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                    <div>
+                        <div style="font-weight:900;color:#7dd3fc;font-size:1.02rem;display:flex;align-items:center;gap:6px;">
+                            📷 秩序冊照片/截圖 (JPG) ＆ 整本 PDF 自動抓取
+                        </div>
+                        <div style="font-size:0.8rem;color:var(--text-secondary);margin-top:3px;">
+                            不用逐字打！拍下單頁秩序冊照片（JPG/PNG）或傳入 PDF，系統自動 OCR 辨識隊名、背號與球員！
+                        </div>
+                    </div>
+                    <div>
+                        <input type="file" id="opp-pdf-file-input" accept=".pdf,image/jpeg,image/png,image/webp" multiple style="display:none;" onchange="app.handlePdfRosterUpload(event)">
+                        <label for="opp-pdf-file-input" class="btn btn-primary" style="cursor:pointer;font-size:0.88rem;padding:9px 18px;background:linear-gradient(135deg,#0284c7,#0369a1);border-color:#38bdf8;font-weight:900;">
+                            📸 選擇/拍攝秩序冊相片 (JPG 或 PDF)
+                        </label>
+                    </div>
+                </div>
+                <div id="opp-pdf-progress-bar" style="display:none;margin-top:10px;padding:8px 12px;background:rgba(6,21,39,0.85);border-radius:8px;border:1px dashed #38bdf8;">
+                    <div style="font-size:0.82rem;color:#7dd3fc;font-weight:800;" id="opp-pdf-progress-text">正在辨識相片文字...</div>
+                </div>
+            </div>
+
+            <!-- 💡 手機最快神技提示列 -->
+            <div style="margin-bottom:14px;padding:9px 12px;background:rgba(245,158,11,0.12);border:1px dashed #f59e0b;border-radius:8px;font-size:0.8rem;color:#fde68a;display:flex;align-items:center;gap:8px;">
+                <span style="font-size:1.1rem;">💡</span>
+                <span><b>手機最快神技：</b>在 LINE 群組點開對手秩序冊照片 ➔ 按右下角 <b>[T] 文字辨識</b> ➔ 點「複製全部」 ➔ 點下方「⚡ 貼上一鍵解析」，<b>1 秒內 100% 精準匯入！</b></span>
+            </div>
+
+            <!-- PDF 解析成果預覽確認面板 (平時隱藏，解析出成果時顯示) -->
+            <div id="opp-pdf-preview-panel" style="display:none;background:rgba(16,185,129,0.12);border:1.5px solid #10b981;border-radius:12px;padding:14px;margin-bottom:16px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+                    <div style="font-weight:900;color:#6ee7b7;font-size:0.96rem;" id="opp-pdf-preview-title">
+                        🎉 成功辨識出隊伍！
+                    </div>
+                    <div style="display:flex;gap:6px;">
+                        <button type="button" class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="app.toggleAllPdfPreviewTeams(true)">全選</button>
+                        <button type="button" class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="app.toggleAllPdfPreviewTeams(false)">取消全選</button>
+                        <button type="button" class="btn btn-primary" style="padding:5px 14px;font-size:0.82rem;background:#10b981;border-color:#34d399;font-weight:900;" onclick="app.confirmImportPdfRosters()">
+                            ✅ 一鍵匯入選取的所有隊伍
+                        </button>
+                    </div>
+                </div>
+                <div id="opp-pdf-preview-list" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));gap:8px;max-height:200px;overflow-y:auto;padding:4px;"></div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:16px;">
+                <!-- 左側：已儲存的學校清單 -->
+                <div style="background:var(--bg-primary);padding:14px;border-radius:10px;border:1px solid var(--border-color);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <div style="font-size:0.86rem;font-weight:800;color:var(--jj-gold-light);">
+                            🏫 已預錄的對手學校
+                        </div>
+                        <button type="button" class="btn btn-danger" style="padding:2px 8px;font-size:0.74rem;" onclick="app.clearAllOpponentTeamsFromModal()">
+                            清空名單
+                        </button>
+                    </div>
+                    <div id="opp-modal-teams-list" style="display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto;margin-bottom:12px;"></div>
+                    <div style="display:flex;gap:6px;">
+                        <input type="text" id="opp-modal-new-team-name" class="form-control" placeholder="輸入新學校名稱 (如：台南協進)">
+                        <button type="button" class="btn btn-primary" style="white-space:nowrap;padding:4px 10px;" onclick="app.addNewOpponentTeamFromModal()">＋ 新增學校</button>
+                    </div>
+                </div>
+
+                <!-- 右側：當前學校的秩序冊球員編輯區 -->
+                <div style="background:var(--bg-primary);padding:14px;border-radius:10px;border:1px solid var(--border-color);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <div style="font-size:0.86rem;font-weight:800;color:#7dd3fc;" id="opp-modal-cur-team-title">
+                            📝 編輯名冊
+                        </div>
+                        <button type="button" class="btn btn-danger" style="padding:2px 8px;font-size:0.75rem;" onclick="app.deleteCurrentOpponentTeamFromModal()">
+                            🗑️ 刪除此學校
+                        </button>
+                    </div>
+
+                    <!-- 批次複製貼上解析區 (支援 LINE/文字 秩序冊) -->
+                    <details style="margin-bottom:12px;background:rgba(56,189,248,0.06);border:1px dashed #38bdf8;border-radius:8px;padding:8px 10px;">
+                        <summary style="cursor:pointer;font-size:0.82rem;font-weight:800;color:#7dd3fc;">
+                            ⚡ 貼上 LINE / 文字名單 一鍵解析匯入 (點開查看)
+                        </summary>
+                        <p style="font-size:0.76rem;color:var(--text-secondary);margin:6px 0 4px 0;">
+                            每行格式支援：「背號 姓名 守位」或「背號 姓名」，例如：<br>
+                            <code>1 邱大偉 投手</code> 或 <code>10 張維 一壘手</code>
+                        </p>
+                        <textarea id="opp-modal-batch-text" class="form-control" rows="4" style="font-size:0.82rem;margin-bottom:6px;" placeholder="在此貼上多位選手資料..."></textarea>
+                        <button type="button" class="btn btn-primary" style="padding:4px 10px;font-size:0.8rem;" onclick="app.parseAndApplyOpponentRosterBatch()">
+                            ⚡ 一鍵解析填入下方名單
+                        </button>
+                    </details>
+
+                    <div style="max-height:220px;overflow-y:auto;border:1px solid var(--border-color);border-radius:6px;padding:6px;margin-bottom:10px;">
+                        <table style="width:100%;font-size:0.84rem;">
+                            <thead>
+                                <tr style="color:var(--text-secondary);border-bottom:1px solid var(--border-color);text-align:left;">
+                                    <th style="padding:4px;width:70px;">背號</th>
+                                    <th style="padding:4px;">姓名</th>
+                                    <th style="padding:4px;width:90px;">守位</th>
+                                    <th style="padding:4px;width:40px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="opp-modal-players-tbody"></tbody>
+                        </table>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                        <button type="button" class="btn" style="padding:4px 10px;font-size:0.8rem;" onclick="app.addOpponentRosterRow()">
+                            ＋ 新增選手列
+                        </button>
+                        <button type="button" class="btn btn-primary" style="padding:6px 16px;font-size:0.85rem;" onclick="app.saveOpponentRosterFromModal()">
+                            💾 儲存名冊設定
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 通用彈窗 Modal -->
     <div id="runner-action-modal" class="modal-backdrop" onclick="if(event.target===this)app.closeModal('runner-action-modal')">
         <div class="modal-panel">
@@ -680,6 +852,9 @@
     <script src="js/data.js"></script>
     <script src="js/stats-engine.js"></script>
     <script src="js/scorebook.js"></script>
+    <script src="js/pdf.min.js"></script>
+    <script src="js/tesseract.min.js"></script>
+    <script src="js/pdf-roster-parser.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

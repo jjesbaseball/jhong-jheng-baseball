@@ -81,15 +81,50 @@
                 </div>
             </div>
 
-            <div style="display:flex;align-items:center;gap:8px;">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
                 <button type="button" id="viewer-voice-btn" class="btn" style="padding:6px 10px;font-size:0.76rem;" onclick="liveViewer.toggleVoice()">
                     🔇 語音轉播：關
+                </button>
+                <button type="button" id="viewer-voice-settings-toggle" class="btn" style="padding:6px 9px;font-size:0.76rem;background:rgba(203,176,99,0.15);border-color:var(--cpbl-gold);" onclick="liveViewer.toggleVoiceSettingsPanel()" title="語音與發音人設定">
+                    ⚙️ 語音設定
                 </button>
             </div>
         </div>
     </header>
 
     <main class="parent-live-container">
+
+        <!-- 家長專屬轉播語音設定面板（可隨時調整聲音/語速/試聽） -->
+        <div id="viewer-voice-settings-panel" style="display:none;background:rgba(15,23,42,0.96);border:1px solid var(--cpbl-gold);border-radius:10px;padding:12px 14px;margin-bottom:14px;box-shadow:0 4px 16px rgba(0,0,0,0.4);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <span style="font-size:0.84rem;font-weight:800;color:var(--cpbl-gold-light);">🎙️ 手機語音轉播設定（家長專屬）</span>
+                <button type="button" class="btn" style="padding:2px 8px;font-size:0.72rem;" onclick="liveViewer.toggleVoiceSettingsPanel()">✕ 關閉</button>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;">
+                <div style="flex:1;min-width:180px;">
+                    <label style="font-size:0.72rem;color:var(--text-secondary);display:block;margin-bottom:3px;">選擇發音人人聲（男女聲/Siri/自然人聲）</label>
+                    <select id="viewer-voice-select" class="form-control" style="font-size:0.75rem;padding:4px 8px;height:32px;width:100%;" onchange="liveViewer.onVoiceSelectChange(this.value)">
+                        <option value="">⚡ 自動挑選手機最佳人聲</option>
+                    </select>
+                </div>
+                <div style="width:115px;">
+                    <label style="font-size:0.72rem;color:var(--text-secondary);display:block;margin-bottom:3px;">播報語速</label>
+                    <select id="viewer-voice-rate" class="form-control" style="font-size:0.75rem;padding:4px 8px;height:32px;width:100%;" onchange="liveViewer.onVoiceRateChange(this.value)">
+                        <option value="0.9">0.9x 沉穩慢速</option>
+                        <option value="1.0" selected>1.0x 標準現場</option>
+                        <option value="1.15">1.15x 激昂快速</option>
+                    </select>
+                </div>
+                <div>
+                    <button type="button" class="btn btn-primary" style="padding:6px 12px;font-size:0.75rem;height:32px;" onclick="liveViewer.testVoice()">
+                        ▶ 試聽效果
+                    </button>
+                </div>
+            </div>
+            <div style="font-size:0.72rem;color:var(--text-secondary);margin-top:7px;">
+                💡 提示：更換人聲或語速後會自動儲存到您的手機，開賽時系統即以您選取的聲音即時播報！
+            </div>
+        </div>
 
         <!-- 雙頻道即時觀賽切換器（校內三隊爭霸 ⇄ 對外代表隊） -->
         <div class="channel-switch-bar" style="margin-bottom:14px;">

@@ -89,6 +89,81 @@ const DEFAULT_LEAGUE_DATA = {
         { id: 'p41', teamId: 't3', number: '13', name: '黃啟紘', grade: '少棒隊員', bats: 'R', throws: 'R', pos: 'IF / OF', note: '白隊 #13' },
         { id: 'p42', teamId: 't3', number: '14', name: '洪晨雨', grade: '少棒隊員', bats: 'R', throws: 'R', pos: 'IF / OF', note: '白隊 #14' }
     ],
+    opponentRosters: {
+        '日本武藏府中': {
+            name: '日本武藏府中',
+            updatedAt: '2026-11-12',
+            category: '國外少棒隊伍（日本）',
+            contact: { contactPerson: '', phone: '', fax: '', address: '', email: '' },
+            staff: { leader: '', headCoach: '廣岡東陽 (30)', coaches: ['附田紘生 (28)', '鮫島潤哉 (29)'] },
+            players: [
+                { id: 'opp_武藏府中_01', number: '01', name: '土屋煌太', pos: '捕/投/一/左/中/右', birth: '2014/11/29', teamId: 'OPP' },
+                { id: 'opp_武藏府中_02', number: '02', name: '児玉翔一', pos: '投/捕', birth: '2015/10/05', teamId: 'OPP' },
+                { id: 'opp_武藏府中_03', number: '03', name: '小松千晴', pos: '一/二', birth: '2014/10/06', teamId: 'OPP' },
+                { id: 'opp_武藏府中_04', number: '04', name: '岩田優飛', pos: '投/二/中', birth: '2014/06/25', teamId: 'OPP' },
+                { id: 'opp_武藏府中_05', number: '05', name: '内山拓海', pos: '投', birth: '2015/04/22', teamId: 'OPP' },
+                { id: 'opp_武藏府中_06', number: '06', name: '中橋進次郎', pos: '遊', birth: '2015/04/16', teamId: 'OPP' },
+                { id: 'opp_武藏府中_07', number: '07', name: '島崎瑛太郎', pos: '左', birth: '2014/08/23', teamId: 'OPP' },
+                { id: 'opp_武藏府中_08', number: '08', name: '渡真利和音', pos: '投/一/中', birth: '2015/02/08', teamId: 'OPP' },
+                { id: 'opp_武藏府中_09', number: '09', name: '鎌田颯太', pos: '三/右', birth: '2014/10/28', teamId: 'OPP' },
+                { id: 'opp_武藏府中_10', number: '10', name: '鮫島昊雅', pos: '中', birth: '2014/05/14', teamId: 'OPP' },
+                { id: 'opp_武藏府中_11', number: '11', name: '永野泰士', pos: '投', birth: '2015/05/12', teamId: 'OPP' },
+                { id: 'opp_武藏府中_12', number: '12', name: '中西統真', pos: '二', birth: '2015/06/01', teamId: 'OPP' },
+                { id: 'opp_武藏府中_13', number: '13', name: '坂田優人', pos: '投/一/三/左/右', birth: '2015/05/30', teamId: 'OPP' },
+                { id: 'opp_武藏府中_14', number: '14', name: '下淵大誠', pos: '二/左/中', birth: '2015/12/04', teamId: 'OPP' },
+                { id: 'opp_武藏府中_15', number: '15', name: '大瀧晴', pos: '左', birth: '2016/03/15', teamId: 'OPP' },
+                { id: 'opp_武藏府中_16', number: '16', name: '三宅晴翔', pos: '捕/三', birth: '2016/03/15', teamId: 'OPP' }
+            ]
+        },
+        '高雄市屏山國小': {
+            name: '高雄市屏山國小',
+            updatedAt: '2026-11-12',
+            category: '高雄市少棒隊伍',
+            contact: { contactPerson: '王柏仁', phone: '0953775295', fax: '07-5835341', address: '高雄市左營區海功東路2號', email: 'boren0131@gmail.com' },
+            staff: { leader: '黃俊傑', headCoach: '王柏仁 (30)', coaches: ['陳俊宏 (29)', '林生金 (28)'] },
+            players: [
+                { id: 'opp_屏山國小_01', number: '01', name: '桑炫宇', pos: 'P/OF', birth: '2015/06/12', teamId: 'OPP' },
+                { id: 'opp_屏山國小_02', number: '02', name: '陳建熏', pos: 'P/C', birth: '2015/03/03', teamId: 'OPP' },
+                { id: 'opp_屏山國小_03', number: '03', name: '林尉傑', pos: 'P/IF', birth: '2015/02/10', teamId: 'OPP' },
+                { id: 'opp_屏山國小_04', number: '04', name: '李至勛', pos: 'IF', birth: '2015/03/18', teamId: 'OPP' },
+                { id: 'opp_屏山國小_05', number: '05', name: '葉俊佑', pos: 'P/IF', birth: '2015/07/14', teamId: 'OPP' },
+                { id: 'opp_屏山國小_06', number: '06', name: '徐希侑', pos: 'P/IF', birth: '2015/06/29', teamId: 'OPP' },
+                { id: 'opp_屏山國小_07', number: '07', name: '高葆宇', pos: 'P/OF', birth: '2014/11/21', teamId: 'OPP' },
+                { id: 'opp_屏山國小_08', number: '08', name: '謝柏樂', pos: 'OF', birth: '2015/08/25', teamId: 'OPP' },
+                { id: 'opp_屏山國小_09', number: '09', name: '王適安', pos: 'OF', birth: '2015/09/01', teamId: 'OPP' },
+                { id: 'opp_屏山國小_10', number: '10', name: '朱修緯', pos: 'P/IF', birth: '2014/10/31', teamId: 'OPP' },
+                { id: 'opp_屏山國小_11', number: '11', name: '楊恩宇', pos: 'C', birth: '2014/12/28', teamId: 'OPP' },
+                { id: 'opp_屏山國小_12', number: '12', name: '白儼楷', pos: 'OF', birth: '2015/05/11', teamId: 'OPP' },
+                { id: 'opp_屏山國小_13', number: '13', name: '陳喬丹', pos: 'P/IF', birth: '2014/09/25', teamId: 'OPP' },
+                { id: 'opp_屏山國小_14', number: '14', name: '洪浚栩', pos: 'C', birth: '2016/07/01', teamId: 'OPP' },
+                { id: 'opp_屏山國小_15', number: '15', name: '蘇宇凡', pos: 'OF', birth: '2016/07/10', teamId: 'OPP' }
+            ]
+        },
+        '臺中市塗城國小': {
+            name: '臺中市塗城國小',
+            updatedAt: '2026-11-12',
+            category: '臺中市少棒隊伍',
+            contact: { contactPerson: '謝明峰', phone: '0952493333', fax: '04-24954474', address: '臺中市大里區文化街120號', email: 'a_feng6@yahoo.com.tw' },
+            staff: { leader: '黃富揚', headCoach: '謝明峰 (30)', coaches: ['彭冠綸 (29)', '胡家維 (28)'] },
+            players: [
+                { id: 'opp_塗城國小_01', number: '01', name: '馬貫銓', pos: 'IF', birth: '2015/08/04', teamId: 'OPP' },
+                { id: 'opp_塗城國小_02', number: '02', name: '江佑賢', pos: 'P', birth: '2016/08/22', teamId: 'OPP' },
+                { id: 'opp_塗城國小_03', number: '03', name: '廖旭昇', pos: 'P', birth: '2014/12/03', teamId: 'OPP' },
+                { id: 'opp_塗城國小_04', number: '04', name: '戴榞宏', pos: 'OF', birth: '2015/04/06', teamId: 'OPP' },
+                { id: 'opp_塗城國小_05', number: '05', name: '陳千豐', pos: 'IF', birth: '2015/05/20', teamId: 'OPP' },
+                { id: 'opp_塗城國小_06', number: '06', name: '劉召揚', pos: 'IF', birth: '2015/04/16', teamId: 'OPP' },
+                { id: 'opp_塗城國小_07', number: '07', name: '林閔証', pos: 'C', birth: '2014/11/05', teamId: 'OPP' },
+                { id: 'opp_塗城國小_08', number: '08', name: '柯宸浩', pos: 'OF', birth: '2015/02/25', teamId: 'OPP' },
+                { id: 'opp_塗城國小_09', number: '09', name: '曾子豪', pos: 'IF', birth: '2015/09/14', teamId: 'OPP' },
+                { id: 'opp_塗城國小_10', number: '10', name: '劉祐瑋', pos: 'OF', birth: '2014/10/31', teamId: 'OPP' },
+                { id: 'opp_塗城國小_11', number: '11', name: '林立', pos: 'IF', birth: '2016/08/17', teamId: 'OPP' },
+                { id: 'opp_塗城國小_12', number: '12', name: '柯宸瀚', pos: 'OF', birth: '2016/02/17', teamId: 'OPP' },
+                { id: 'opp_塗城國小_13', number: '13', name: '張閔竣', pos: 'OF', birth: '2015/09/14', teamId: 'OPP' },
+                { id: 'opp_塗城國小_14', number: '14', name: '張若翔', pos: 'P', birth: '2015/08/06', teamId: 'OPP' },
+                { id: 'opp_塗城國小_15', number: '15', name: '李麟峯', pos: 'P', birth: '2015/12/01', teamId: 'OPP' }
+            ]
+        }
+    },
     trades: [],
     games: []
 };
@@ -187,6 +262,24 @@ class DataStore {
             tr.fromPlayers = Array.isArray(tr.fromPlayers) ? tr.fromPlayers : (tr.fromPlayers ? Object.values(tr.fromPlayers) : []);
             tr.toPlayers = Array.isArray(tr.toPlayers) ? tr.toPlayers : (tr.toPlayers ? Object.values(tr.toPlayers) : []);
         });
+
+        // 確保秩序冊對手預錄庫為純淨物件（不預載示範學校，由教練匯入 PDF 或手動新增）
+        if (!d.opponentRosters || typeof d.opponentRosters !== 'object') {
+            d.opponentRosters = {};
+        }
+        // 清理先前測試留存的預設示範隊伍
+        delete d.opponentRosters['桃園市龜山國小'];
+        delete d.opponentRosters['台北市福林國小'];
+        delete d.opponentRosters['台北市東園國小'];
+
+        // 自動合併預載的大賽對手秩序冊名冊
+        if (DEFAULT_LEAGUE_DATA.opponentRosters) {
+            for (const teamKey in DEFAULT_LEAGUE_DATA.opponentRosters) {
+                if (!d.opponentRosters[teamKey]) {
+                    d.opponentRosters[teamKey] = DEFAULT_LEAGUE_DATA.opponentRosters[teamKey];
+                }
+            }
+        }
 
         return d;
     }
@@ -351,7 +444,7 @@ class DataStore {
     }
 
     async initServerSync() {
-        if (window.location.protocol === 'file:') return;
+        if (typeof window === 'undefined' || !window.location || window.location.protocol === 'file:') return;
         try {
             const res = await fetch('/api/data', { cache: 'no-store' });
             if (res.ok) {
@@ -427,7 +520,39 @@ class DataStore {
     }
 
     getPlayer(playerId) {
-        return (this.data.players || []).find(p => p.id === playerId);
+        if (!playerId) return null;
+        const local = (this.data.players || []).find(p => p.id === playerId);
+        if (local) return local;
+
+        // 搜尋秩序冊對手球員庫
+        if (this.data.opponentRosters) {
+            for (const teamKey in this.data.opponentRosters) {
+                const team = this.data.opponentRosters[teamKey];
+                const list = Array.isArray(team?.players) ? team.players : (Array.isArray(team) ? team : []);
+                const found = list.find(p => p.id === playerId);
+                if (found) return found;
+            }
+        }
+
+        // 動態產生的對手棒次 (例如 opp_b_1 ~ opp_b_9)
+        if (String(playerId).startsWith('opp_b_')) {
+            const num = String(playerId).replace('opp_b_', '');
+            return { id: playerId, name: `第 ${num} 棒`, number: num, teamId: 'OPP', pos: '打者' };
+        }
+        if (String(playerId).startsWith('opp_sp')) {
+            return { id: playerId, name: '先發投手', number: '1', teamId: 'OPP', pos: 'P / 投手' };
+        }
+        if (playerId === 'opp_batter') {
+            return { id: 'opp_batter', name: '對手選手', number: '', teamId: 'OPP', pos: '打者' };
+        }
+        if (String(playerId).startsWith('opp_cust_')) {
+            const parts = String(playerId).split('_');
+            const num = parts[2] || '';
+            const name = parts[3] || '對手選手';
+            return { id: playerId, name, number: num, teamId: 'OPP', pos: '選手' };
+        }
+
+        return null;
     }
 
     getPlayersByTeam(teamId) {
@@ -439,7 +564,70 @@ class DataStore {
             const otherList = all.filter(p => p.teamId !== 'tA');
             return [...aList, ...otherList];
         }
+        if (teamId === 'OPP' || String(teamId || '').startsWith('OPP:')) {
+            const parsedOpp = String(teamId || '').startsWith('OPP:') ? String(teamId).slice(4) : '';
+            return this.getOpponentPlayers(parsedOpp);
+        }
         return (this.data.players || []).filter(p => p.teamId === teamId);
+    }
+
+    getOpponentTeamsList() {
+        if (!this.data.opponentRosters) return [];
+        return Object.keys(this.data.opponentRosters);
+    }
+
+    getOpponentPlayers(teamName) {
+        if (teamName && this.data.opponentRosters && this.data.opponentRosters[teamName]) {
+            const entry = this.data.opponentRosters[teamName];
+            return Array.isArray(entry.players) ? entry.players : (Array.isArray(entry) ? entry : []);
+        }
+        return Array.from({ length: 9 }, (_, i) => ({
+            id: `opp_b_${i + 1}`,
+            number: `${i + 1}`,
+            name: `第 ${i + 1} 棒`,
+            pos: i === 0 ? 'P / 投手' : (i === 1 ? 'C / 捕手' : '打者'),
+            teamId: 'OPP'
+        }));
+    }
+
+    saveOpponentRoster(teamName, playersList) {
+        if (!teamName || !teamName.trim()) return;
+        const key = teamName.trim();
+        if (!this.data.opponentRosters) this.data.opponentRosters = {};
+        this.data.opponentRosters[key] = {
+            name: key,
+            updatedAt: new Date().toISOString().slice(0, 10),
+            players: playersList || []
+        };
+        this.save();
+    }
+
+    saveOpponentRostersBatch(teamsList) {
+        if (!Array.isArray(teamsList)) return;
+        if (!this.data.opponentRosters) this.data.opponentRosters = {};
+        teamsList.forEach(t => {
+            if (t && t.schoolName && Array.isArray(t.players)) {
+                const key = t.schoolName.trim();
+                this.data.opponentRosters[key] = {
+                    name: key,
+                    updatedAt: new Date().toISOString().slice(0, 10),
+                    players: t.players
+                };
+            }
+        });
+        this.save();
+    }
+
+    clearAllOpponentRosters() {
+        this.data.opponentRosters = {};
+        this.save();
+    }
+
+    deleteOpponentRoster(teamName) {
+        if (teamName && this.data.opponentRosters && this.data.opponentRosters[teamName]) {
+            delete this.data.opponentRosters[teamName];
+            this.save();
+        }
     }
 }
 

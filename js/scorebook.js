@@ -185,7 +185,7 @@ class LiveScorebook {
         this.activeChannel = channel;
 
         const maxInnings = Number(config.innings) || 4;
-        const sameTeamPitcher = config.sameTeamPitcher !== undefined ? Boolean(config.sameTeamPitcher) : true;
+        const sameTeamPitcher = isExternal ? false : (config.sameTeamPitcher !== undefined ? Boolean(config.sameTeamPitcher) : true);
         const awayTeamId = config.awayTeamId;
         const homeTeamId = config.homeTeamId;
         const awayLineup = config.awayLineup || [];
@@ -344,18 +344,60 @@ class LiveScorebook {
         let batter = batterId ? window.store.getPlayer(batterId) : null;
         if (!batter && (batterId === 'opp_batter' || String(battingTeamId || '').startsWith('OPP'))) {
             const oppTeam = window.store.getTeam(battingTeamId);
-            batter = { id: 'opp_batter', name: `${oppTeam.name}打者`, number: '對手', teamId: battingTeamId, pos: '對手' };
+            batter = { id: batterId || 'opp_batter', name: `${oppTeam.name}選手`, number: '對手', teamId: battingTeamId, pos: '選手' };
         }
 
         const pitcherId = sameTeam
             ? (isTop ? this.state.awayPitcherId : this.state.homePitcherId)
             : (isTop ? this.state.homePitcherId : this.state.awayPitcherId);
+        const pitcherTeamId = sameTeam ? battingTeamId : (isTop ? this.state.homeTeamId : this.state.awayTeamId);
+
+        let pitcher = pitcherId ? window.store.getPlayer(pitcherId) : null;
+        if (!pitcher && (pitcherId === 'opp_sp' || pitcherId === 'opp_batter' || String(pitcherTeamId || '').startsWith('OPP'))) {
+            const oppTeam = window.store.getTeam(pitcherTeamId);
+            pitcher = { id: pitcherId || 'opp_sp', name: `${oppTeam.name}投手`, number: '1', teamId: pitcherTeamId, pos: 'P / 投手' };
+        }
 
         return {
             orderNo: lineup.length > 0 ? (bIdx % lineup.length) + 1 : 1,
             batter,
-            pitcher: pitcherId ? window.store.getPlayer(pitcherId) : null
+            pitcher
         };
+    }
+
+    updateInGamePlayer(oldId, newName, newNumber) {
+        if (!this.state) return;
+        this.pushHistory();
+        const cleanName = (newName || '').trim();
+        const cleanNum = (newNumber || '').trim();
+        if (!cleanName) return;
+
+        const newId = `opp_cust_${cleanNum || '0'}_${cleanName}`;
+        this.state.awayLineup = (this.state.awayLineup || []).map(id => id === oldId ? newId : id);
+        this.state.homeLineup = (this.state.homeLineup || []).map(id => id === oldId ? newId : id);
+        if (this.state.awayPitcherId === oldId) this.state.awayPitcherId = newId;
+        if (this.state.homePitcherId === oldId) this.state.homePitcherId = newId;
+
+        ['first', 'second', 'third'].forEach(baseKey => {
+            const r = this.state.bases[baseKey];
+            if (r && (r.playerId === oldId || r.id === oldId)) {
+                r.playerId = newId;
+                r.name = cleanName;
+                r.number = cleanNum;
+            }
+        });
+
+        if (this.state.battingStats && this.state.battingStats[oldId]) {
+            this.state.battingStats[newId] = this.state.battingStats[oldId];
+            delete this.state.battingStats[oldId];
+        }
+        if (this.state.pitchingStats && this.state.pitchingStats[oldId]) {
+            this.state.pitchingStats[newId] = this.state.pitchingStats[oldId];
+            delete this.state.pitchingStats[oldId];
+        }
+
+        this.addLog(`更換選手：#${cleanNum} ${cleanName}`);
+        this.saveLiveState();
     }
 
     addLog(text) {

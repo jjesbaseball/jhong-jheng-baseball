@@ -18,6 +18,10 @@ class BaseballApp {
         this.preferredVoiceURI = localStorage.getItem('JJ_PREFERRED_VOICE_URI') || '';
         this._hrAnimId = null;
         this._hrHideTimer = null;
+        this.oppLineupMode = 'roster'; // 'roster' | 'quick'
+        this.setupOppOrder = []; // 外部對手先發打序
+        this.oppModalCurrentTeam = ''; // 秩序冊名冊彈窗目前選中的學校
+        this.pdfParsedTeams = []; // PDF 解析暫存隊伍
     }
 
     setDataMode(mode) {
@@ -710,6 +714,7 @@ class BaseballApp {
         if (this.dataMode === 'external' && this.setupGameType !== 'external') {
             this.setupGameType = 'external';
         }
+        this.populateOpponentPresets();
         this.applySetupGameTypeUI();
         this.updateSetupTeamLineups();
     }
@@ -723,6 +728,7 @@ class BaseballApp {
                 tourInput.value = '對外友誼賽 / 盃賽';
             }
             if (inningsSel) inningsSel.value = '6';
+            this.populateOpponentPresets();
         } else {
             if (tourInput && (tourInput.value.includes('對外') || !tourInput.value.trim())) {
                 tourInput.value = '隊內三隊爭霸練習賽 (4局制)';
@@ -740,24 +746,93 @@ class BaseballApp {
 
         const extFields = document.getElementById('setup-external-fields');
         const extLineup = document.getElementById('setup-external-lineup-box');
+        const extOppBox = document.getElementById('setup-external-opp-box');
         const intraFields = document.getElementById('setup-intra-fields');
         const intraLineup = document.getElementById('setup-intra-lineup-grid');
         const pitcherModeGroup = document.getElementById('setup-pitcher-mode-group');
 
         if (extFields) extFields.style.display = isExt ? 'grid' : 'none';
         if (extLineup) extLineup.style.display = isExt ? 'block' : 'none';
+        if (extOppBox) extOppBox.style.display = isExt ? 'block' : 'none';
         if (intraFields) intraFields.style.display = isExt ? 'none' : 'grid';
         if (intraLineup) intraLineup.style.display = isExt ? 'none' : 'grid';
         if (pitcherModeGroup) pitcherModeGroup.style.display = isExt ? 'none' : '';
     }
 
+    populateOpponentPresets() {
+        const select = document.getElementById('setup-opp-preset-select');
+        const nameInput = document.getElementById('setup-opp-name');
+        if (!select) return;
+
+        const list = window.store.getOpponentTeamsList ? window.store.getOpponentTeamsList() : [];
+        let curVal = nameInput ? nameInput.value.trim() : '';
+
+        if (list.length === 0) {
+            select.innerHTML = `
+                <option value="">-- 尚未匯入對手（點右側 📄 匯入秩序冊 PDF）--</option>
+                <option value="__manage__">📋 📄 匯入整本秩序冊 PDF / 建立新學校...</option>
+            `;
+            if (nameInput && (!nameInput.value || nameInput.value.includes('國小'))) {
+                nameInput.value = '外校對手';
+            }
+            return;
+        }
+
+        if (!curVal || curVal === '外校對手') curVal = list[0];
+
+        let html = '<option value="">-- 快速選擇預錄學校名冊 --</option>';
+        list.forEach(teamName => {
+            html += `<option value="${teamName}" ${teamName === curVal ? 'selected' : ''}>🏫 ${teamName}</option>`;
+        });
+        html += '<option value="__manage__">📋 📄 匯入整本秩序冊 PDF / 建立新學校...</option>';
+        select.innerHTML = html;
+
+        if (nameInput && (!nameInput.value || nameInput.value === '外校對手') && curVal) {
+            nameInput.value = curVal;
+        }
+    }
+
+    onOpponentPresetSelect(val) {
+        if (val === '__manage__') {
+            this.openOpponentRosterModal();
+            return;
+        }
+        const nameInput = document.getElementById('setup-opp-name');
+        if (nameInput && val) {
+            nameInput.value = val;
+        }
+        this.updateSetupTeamLineups(true);
+    }
+
+    onOpponentNameInput(val) {
+        const titleEl = document.getElementById('setup-opp-box-title');
+        if (titleEl) {
+            titleEl.textContent = `⚔️ ${val.trim() || '外校對手'} — 本場先發投手 ＆ 先發打序`;
+        }
+    }
+
+    toggleOpponentLineupMode(mode) {
+        this.oppLineupMode = (mode === 'quick') ? 'quick' : 'roster';
+        const isRoster = (this.oppLineupMode === 'roster');
+        document.getElementById('btn-opp-mode-roster')?.classList.toggle('active', isRoster);
+        document.getElementById('btn-opp-mode-quick')?.classList.toggle('active', !isRoster);
+        const rosterView = document.getElementById('opp-mode-roster-view');
+        const quickView = document.getElementById('opp-mode-quick-view');
+        if (rosterView) rosterView.style.display = isRoster ? 'block' : 'none';
+        if (quickView) quickView.style.display = isRoster ? 'none' : 'block';
+    }
+
     updateSetupTeamLineups(forceReset = false) {
         if (this.setupGameType === 'external') {
+            // 1. 中正國小少棒代表隊打序與投手
             const allPlayers = window.store.getPlayersByTeam('JJ');
-            if (forceReset || !Array.isArray(this.setupExtOrder)) {
+            if (forceReset || !Array.isArray(this.setupExtOrder) || this.setupExtOrder.length === 0) {
                 this.setupExtOrder = allPlayers.slice(0, 9).map(p => p.id);
             } else {
                 this.setupExtOrder = this.setupExtOrder.filter(id => allPlayers.some(p => p.id === id));
+                if (this.setupExtOrder.length === 0 && allPlayers.length > 0) {
+                    this.setupExtOrder = allPlayers.slice(0, 9).map(p => p.id);
+                }
             }
             const extSpSel = document.getElementById('setup-ext-jj-sp');
             if (extSpSel) {
@@ -766,8 +841,40 @@ class BaseballApp {
                     const isA = p.teamId === 'tA';
                     return `<option value="${p.id}" ${p.id === prevSp ? 'selected' : ''}>${isA ? '⭐ A隊 ' : ''}#${p.number} ${p.name} (${p.pos})</option>`;
                 }).join('');
+                if (!extSpSel.value && allPlayers.length > 0) {
+                    extSpSel.value = allPlayers[0].id;
+                }
             }
             this.renderSetupLineupBox('ext', allPlayers, this.setupExtOrder, 'setup-ext-jj-lineup-list');
+
+            // 2. 外校對手學校打序與先發投手【彈性雙模式】
+            const oppName = document.getElementById('setup-opp-name')?.value.trim() || '桃園市龜山國小';
+            const oppBoxTitle = document.getElementById('setup-opp-box-title');
+            if (oppBoxTitle) {
+                oppBoxTitle.textContent = `⚔️ ${oppName} — 本場先發投手 ＆ 先發打序`;
+            }
+
+            const oppPlayers = window.store.getOpponentPlayers ? window.store.getOpponentPlayers(oppName) : [];
+            if (forceReset || !Array.isArray(this.setupOppOrder) || this.setupOppOrder.length === 0) {
+                this.setupOppOrder = oppPlayers.slice(0, 9).map(p => p.id);
+            } else {
+                this.setupOppOrder = this.setupOppOrder.filter(id => oppPlayers.some(p => p.id === id));
+                if (this.setupOppOrder.length === 0 && oppPlayers.length > 0) {
+                    this.setupOppOrder = oppPlayers.slice(0, 9).map(p => p.id);
+                }
+            }
+
+            const oppSpSel = document.getElementById('setup-ext-opp-sp');
+            if (oppSpSel) {
+                const prevOppSp = oppSpSel.value;
+                oppSpSel.innerHTML = oppPlayers.map(p => {
+                    return `<option value="${p.id}" ${p.id === prevOppSp ? 'selected' : ''}>#${p.number} ${p.name} (${p.pos || '投手'})</option>`;
+                }).join('');
+                if (!oppSpSel.value && oppPlayers.length > 0) {
+                    oppSpSel.value = oppPlayers[0].id;
+                }
+            }
+            this.renderSetupLineupBox('opp', oppPlayers, this.setupOppOrder, 'setup-ext-opp-lineup-list');
             return;
         }
 
@@ -819,13 +926,24 @@ class BaseballApp {
         const unpicked = allTeamPlayers.filter(p => !orderList.includes(p.id));
         const nextOrderNum = orderList.length + 1;
 
-        const toolBarHTML = `
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
-                ${side === 'ext' ? `
+        let quickFillBtn = '';
+        if (side === 'ext') {
+            quickFillBtn = `
                 <button type="button" class="btn" style="padding:4px 9px;font-size:0.76rem;background:rgba(245,158,11,0.25);border-color:#f59e0b;color:#fde68a;font-weight:900;" onclick="app.fillATeamSetupOrder()">
                     ⭐ A隊主力 1~9 棒一鍵排入
                 </button>
-                ` : ''}
+            `;
+        } else if (side === 'opp') {
+            quickFillBtn = `
+                <button type="button" class="btn" style="padding:4px 9px;font-size:0.76rem;background:rgba(56,189,248,0.2);border-color:#38bdf8;color:#7dd3fc;font-weight:800;" onclick="app.fillAllSetupOrder('opp')">
+                    📋 依秩序冊前 9 棒一鍵排入
+                </button>
+            `;
+        }
+
+        const toolBarHTML = `
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+                ${quickFillBtn}
                 <button type="button" class="btn" style="padding:4px 9px;font-size:0.76rem;" onclick="app.clearSetupOrderForTap('${side}')">
                     👆 清空重排（依點擊順序排 1~N 棒）
                 </button>
@@ -841,15 +959,21 @@ class BaseballApp {
         const activeRowsHTML = orderList.map((pid, idx) => {
             const p = window.store.getPlayer(pid);
             if (!p) return '';
+            const isOpp = side === 'opp' || (p.teamId && p.teamId.startsWith('OPP'));
+            const badgeHTML = isOpp
+                ? '<span class="season-badge" style="background:#0284c7;color:#fff;">對手</span>'
+                : this.teamBadgeHTML(p.teamId);
+            const numColor = isOpp ? 'linear-gradient(135deg,#38bdf8,#0284c7)' : 'linear-gradient(135deg,var(--jj-gold-light),var(--jj-gold))';
+
             return `
                 <div style="display:flex;align-items:center;gap:8px;background:var(--bg-primary);padding:7px 10px;border-radius:8px;border:1.5px solid var(--border-color);">
-                    <span style="background:linear-gradient(135deg,var(--jj-gold-light),var(--jj-gold));color:#061527;font-weight:900;font-size:0.76rem;padding:2px 8px;border-radius:6px;min-width:54px;text-align:center;">
+                    <span style="background:${numColor};color:#061527;font-weight:900;font-size:0.76rem;padding:2px 8px;border-radius:6px;min-width:54px;text-align:center;">
                         第 ${idx + 1} 棒
                     </span>
-                    ${this.teamBadgeHTML(p.teamId)}
+                    ${badgeHTML}
                     <span class="num-tag">#${p.number}</span>
                     <strong>${p.name}</strong>
-                    <span style="color:var(--text-secondary);font-size:0.74rem;margin-left:auto;">${p.pos}</span>
+                    <span style="color:var(--text-secondary);font-size:0.74rem;margin-left:auto;">${p.pos || '選手'}</span>
                     <div style="display:flex;gap:4px;">
                         <button type="button" class="btn" style="padding:2px 7px;font-size:0.76rem;" onclick="app.moveSetupOrder('${side}', ${idx}, -1)" ${idx === 0 ? 'disabled style="opacity:0.35;padding:2px 7px;"' : ''}>⬆️</button>
                         <button type="button" class="btn" style="padding:2px 7px;font-size:0.76rem;" onclick="app.moveSetupOrder('${side}', ${idx}, 1)" ${idx === orderList.length - 1 ? 'disabled style="opacity:0.35;padding:2px 7px;"' : ''}>⬇️</button>
@@ -867,8 +991,12 @@ class BaseballApp {
                 <div style="display:flex;flex-wrap:wrap;gap:6px;">
                     ${unpicked.map(p => {
                         const isA = p.teamId === 'tA';
+                        const isOpp = side === 'opp' || (p.teamId && p.teamId.startsWith('OPP'));
+                        const bgStyle = isOpp ? '#0e3a64' : (isA ? 'rgba(245,158,11,0.22)' : '#10345c');
+                        const borderStyle = isOpp ? '#38bdf8' : (isA ? '#f59e0b' : 'var(--jj-gold)');
+                        const colorStyle = isOpp ? '#7dd3fc' : (isA ? '#fde68a' : '#fff');
                         return `
-                        <button type="button" class="btn" style="padding:6px 10px;font-size:0.82rem;background:${isA ? 'rgba(245,158,11,0.22)' : '#10345c'};border-color:${isA ? '#f59e0b' : 'var(--jj-gold)'};color:${isA ? '#fde68a' : '#fff'};font-weight:${isA ? '800' : 'normal'};" onclick="app.addSetupOrderPlayer('${side}', '${p.id}')">
+                        <button type="button" class="btn" style="padding:6px 10px;font-size:0.82rem;background:${bgStyle};border-color:${borderStyle};color:${colorStyle};font-weight:${isA ? '800' : 'normal'};" onclick="app.addSetupOrderPlayer('${side}', '${p.id}')">
                             ${isA ? '⭐ A隊 ' : '➕ '}#${p.number} ${p.name}
                         </button>
                         `;
@@ -882,19 +1010,29 @@ class BaseballApp {
 
     getSetupOrderRef(side) {
         if (side === 'ext') return this.setupExtOrder;
+        if (side === 'opp') return this.setupOppOrder;
         return side === 'away' ? this.setupAwayOrder : this.setupHomeOrder;
     }
 
     clearSetupOrderForTap(side) {
         if (side === 'ext') this.setupExtOrder = [];
+        else if (side === 'opp') this.setupOppOrder = [];
         else if (side === 'away') this.setupAwayOrder = [];
         else this.setupHomeOrder = [];
         this.updateSetupTeamLineups(false);
     }
 
     fillAllSetupOrder(side) {
-        const teamId = side === 'ext' ? 'JJ' : document.getElementById(side === 'away' ? 'setup-away-team' : 'setup-home-team')?.value;
-        const players = window.store.getPlayersByTeam(teamId);
+        let players = [];
+        if (side === 'ext') {
+            players = window.store.getPlayersByTeam('JJ');
+        } else if (side === 'opp') {
+            const oppName = document.getElementById('setup-opp-name')?.value.trim() || '外校對手';
+            players = window.store.getOpponentPlayers(oppName);
+        } else {
+            const teamId = document.getElementById(side === 'away' ? 'setup-away-team' : 'setup-home-team')?.value;
+            players = window.store.getPlayersByTeam(teamId);
+        }
         const list = this.getSetupOrderRef(side);
         players.forEach(p => {
             if (!list.includes(p.id)) list.push(p.id);
@@ -923,6 +1061,8 @@ class BaseballApp {
     removeSetupOrderPlayer(side, pid) {
         if (side === 'ext') {
             this.setupExtOrder = (this.setupExtOrder || []).filter(id => id !== pid);
+        } else if (side === 'opp') {
+            this.setupOppOrder = (this.setupOppOrder || []).filter(id => id !== pid);
         } else if (side === 'away') {
             this.setupAwayOrder = this.setupAwayOrder.filter(id => id !== pid);
         } else {
@@ -953,13 +1093,30 @@ class BaseballApp {
                 return;
             }
 
+            let oppLineup = [];
+            let oppStarterId = '';
+
+            if (this.oppLineupMode === 'quick') {
+                // ⚡ 快速預設模式：1~9棒自動生成
+                oppLineup = Array.from({ length: 9 }, (_, i) => `opp_b_${i + 1}`);
+                oppStarterId = 'opp_sp';
+            } else {
+                // 📋 秩序冊名單排打序模式
+                oppLineup = [...(this.setupOppOrder || [])];
+                if (oppLineup.length === 0) {
+                    const oppPlayers = window.store.getOpponentPlayers(oppName);
+                    oppLineup = oppPlayers.slice(0, 9).map(p => p.id);
+                }
+                oppStarterId = document.getElementById('setup-ext-opp-sp')?.value || (oppLineup[0] || 'opp_sp');
+            }
+
             const oppTeamId = `OPP:${oppName}`;
             const awayTeamId = jjSide === 'away' ? 'JJ' : oppTeamId;
             const homeTeamId = jjSide === 'away' ? oppTeamId : 'JJ';
-            const awayLineup = jjSide === 'away' ? jjLineup : ['opp_batter'];
-            const homeLineup = jjSide === 'away' ? ['opp_batter'] : jjLineup;
-            const awayStarterId = jjSide === 'away' ? jjSpId : 'opp_batter';
-            const homeStarterId = jjSide === 'away' ? 'opp_batter' : jjSpId;
+            const awayLineup = jjSide === 'away' ? jjLineup : oppLineup;
+            const homeLineup = jjSide === 'away' ? oppLineup : jjLineup;
+            const awayStarterId = jjSide === 'away' ? jjSpId : oppStarterId;
+            const homeStarterId = jjSide === 'away' ? oppStarterId : jjSpId;
 
             window.scorebook.startNewGame({
                 tournament, date, innings,
@@ -1616,6 +1773,30 @@ class BaseballApp {
             </div>
         ` : '';
 
+        const canEditLivePlayer = Boolean(st.isExternal || (battingTeam.id && battingTeam.id.startsWith('OPP')));
+        const curBatterPid = lineup[curBatterIdx] || lineup[0];
+        const curBatterObj = curBatterPid ? window.store.getPlayer(curBatterPid) : null;
+        const editSectionHTML = canEditLivePlayer ? `
+            <div style="margin-top:14px;padding:12px;background:rgba(56,189,248,0.1);border:1.5px solid #38bdf8;border-radius:10px;">
+                <div style="font-size:0.84rem;font-weight:800;color:#7dd3fc;margin-bottom:8px;">
+                    ✏️ 現場即時更正/補填打者姓名與背號
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                    <select id="live-edit-player-target" class="form-control" style="flex:1.2;min-width:140px;" onchange="app.onLiveEditPlayerTargetChange(this.value)">
+                        ${lineup.map(pid => {
+                            const p = window.store.getPlayer(pid);
+                            return `<option value="${pid}" ${pid === curBatterPid ? 'selected' : ''}>#${p ? p.number : ''} ${p ? p.name : pid}</option>`;
+                        }).join('')}
+                    </select>
+                    <input type="text" id="live-edit-player-num" class="form-control" style="width:70px;" placeholder="背號" value="${curBatterObj ? curBatterObj.number : ''}">
+                    <input type="text" id="live-edit-player-name" class="form-control" style="flex:1;min-width:110px;" placeholder="選手姓名" value="${curBatterObj ? curBatterObj.name : ''}">
+                    <button type="button" class="btn btn-primary" style="white-space:nowrap;padding:6px 12px;font-size:0.82rem;" onclick="app.submitInGamePlayerEdit()">
+                        儲存更名
+                    </button>
+                </div>
+            </div>
+        ` : '';
+
         body.innerHTML = `
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
                 <button type="button" class="btn" onclick="app.clearLiveLineupForTap()">👆 清空重排（依點擊順序決定 1~N 棒）</button>
@@ -1625,11 +1806,54 @@ class BaseballApp {
                 ${rowsHTML || '<div style="padding:14px;text-align:center;color:var(--text-secondary);">請點擊下方球員依序排入第 1 棒、第 2 棒...</div>'}
                 ${unpickedHTML}
             </div>
+            ${editSectionHTML}
             <div style="margin-top:14px;display:flex;justify-content:flex-end;">
                 <button type="button" class="btn btn-primary" onclick="app.closeModal('runner-action-modal');app.renderScorebookView();">✅ 完成打序調整</button>
             </div>
         `;
         modal.classList.add('open');
+    }
+
+    onLiveEditPlayerTargetChange(pid) {
+        const p = window.store.getPlayer(pid);
+        const numInput = document.getElementById('live-edit-player-num');
+        const nameInput = document.getElementById('live-edit-player-name');
+        if (p) {
+            if (numInput) numInput.value = p.number;
+            if (nameInput) nameInput.value = p.name;
+        }
+    }
+
+    submitInGamePlayerEdit() {
+        const targetSel = document.getElementById('live-edit-player-target');
+        const numInput = document.getElementById('live-edit-player-num');
+        const nameInput = document.getElementById('live-edit-player-name');
+        if (!targetSel || !nameInput) return;
+        const oldId = targetSel.value;
+        const newName = nameInput.value.trim();
+        const newNumber = numInput ? numInput.value.trim() : '';
+        if (!newName) {
+            alert('請輸入選手姓名！');
+            return;
+        }
+        window.scorebook.updateInGamePlayer(oldId, newName, newNumber);
+        this.renderScorebookView();
+        this.promptChangeBatter();
+    }
+
+    submitInGamePitcherEdit(pitcherId) {
+        const numInput = document.getElementById('live-edit-pitcher-num');
+        const nameInput = document.getElementById('live-edit-pitcher-name');
+        if (!pitcherId || !nameInput) return;
+        const newName = nameInput.value.trim();
+        const newNumber = numInput ? numInput.value.trim() : '';
+        if (!newName) {
+            alert('請輸入投手姓名！');
+            return;
+        }
+        window.scorebook.updateInGamePlayer(pitcherId, newName, newNumber);
+        this.renderScorebookView();
+        this.openChangePitcherModal();
     }
 
     setLiveBatterIndex(idx) {
@@ -1737,6 +1961,22 @@ class BaseballApp {
         const title = document.getElementById('runner-modal-title');
         const body = document.getElementById('runner-modal-body');
         title.textContent = `🔄 更換【${activePitcherTeam.emoji}${activePitcherTeam.name}】場上投手`;
+        const canEditPitcher = Boolean(st.isExternal || (activePitcherTeam.id && activePitcherTeam.id.startsWith('OPP')));
+        const pitcherEditHTML = canEditPitcher ? `
+            <div style="margin-top:14px;padding:12px;background:rgba(56,189,248,0.1);border:1.5px solid #38bdf8;border-radius:10px;">
+                <div style="font-size:0.84rem;font-weight:800;color:#7dd3fc;margin-bottom:8px;">
+                    ✏️ 現場即時更正/補填目前場上投手姓名與背號
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                    <input type="text" id="live-edit-pitcher-num" class="form-control" style="width:70px;" placeholder="背號" value="${pitcher ? pitcher.number : ''}">
+                    <input type="text" id="live-edit-pitcher-name" class="form-control" style="flex:1;min-width:110px;" placeholder="投手姓名" value="${pitcher ? pitcher.name : ''}">
+                    <button type="button" class="btn btn-primary" style="white-space:nowrap;padding:6px 12px;font-size:0.82rem;" onclick="app.submitInGamePitcherEdit('${pitcher ? pitcher.id : ''}')">
+                        儲存更名
+                    </button>
+                </div>
+            </div>
+        ` : '';
+
         body.innerHTML = `
             <div class="form-group" style="margin-bottom:12px;">
                 <label>選擇【${activePitcherTeam.name}】接替登板投球的隊員：</label>
@@ -1745,6 +1985,7 @@ class BaseballApp {
                 </select>
             </div>
             <button class="btn btn-primary" onclick="app.confirmChangePitcher()">確認換投</button>
+            ${pitcherEditHTML}
         `;
         modal.classList.add('open');
     }
@@ -3267,6 +3508,368 @@ class BaseballApp {
         a.download = `少棒三隊聯盟_打擊統計報表.csv`;
         a.click();
         URL.revokeObjectURL(url);
+    }
+
+    // ==========================================
+    // 對手秩序冊名單庫管理 (Opponent Roster Modal)
+    // ==========================================
+
+    openOpponentRosterModal(selectTeamName = null) {
+        const list = window.store.getOpponentTeamsList ? window.store.getOpponentTeamsList() : [];
+        const currentInput = document.getElementById('setup-opp-name')?.value.trim();
+        this.oppModalCurrentTeam = selectTeamName || (currentInput && currentInput !== '外校對手' ? currentInput : '') || (list.length > 0 ? list[0] : '');
+        this.renderOpponentRosterModal();
+        document.getElementById('opponent-roster-modal')?.classList.add('open');
+    }
+
+    async handlePdfRosterUpload(event) {
+        const files = event.target.files ? Array.from(event.target.files) : [];
+        if (files.length === 0) return;
+
+        const progressBar = document.getElementById('opp-pdf-progress-bar');
+        const progressText = document.getElementById('opp-pdf-progress-text');
+        const previewPanel = document.getElementById('opp-pdf-preview-panel');
+
+        if (progressBar) progressBar.style.display = 'block';
+        if (previewPanel) previewPanel.style.display = 'none';
+
+        try {
+            const parser = new PdfRosterParser();
+            const allResults = [];
+
+            for (let fIdx = 0; fIdx < files.length; fIdx++) {
+                const file = files[fIdx];
+                const isImage = (file.type && file.type.startsWith('image/')) || /\.(jpe?g|png|webp)$/i.test(file.name || '');
+
+                if (progressText) {
+                    progressText.textContent = files.length > 1
+                        ? `⏳ 正在辨識第 ${fIdx + 1} / ${files.length} 個檔案（${file.name}）...`
+                        : (isImage ? `⏳ 正在進行相片文字辨識 (OCR)...` : `⏳ 正在讀取並解析 PDF 秩序冊...`);
+                }
+
+                const fileResults = await parser.parseTournamentFile(file, info => {
+                    if (progressText && info && info.message) {
+                        progressText.textContent = files.length > 1
+                            ? `⏳ [${fIdx + 1}/${files.length}] ${info.message}`
+                            : `⏳ ${info.message}`;
+                    }
+                });
+
+                if (Array.isArray(fileResults) && fileResults.length > 0) {
+                    allResults.push(...fileResults);
+                }
+            }
+
+            if (progressBar) progressBar.style.display = 'none';
+
+            if (allResults.length === 0) {
+                alert('⚠️ 未能從檔案中自動辨識出球隊與選手名冊。\n\n可能原因：相片角度過於傾斜、解析度不足，或 PDF 為無文字層之純圖檔。\n\n💡 建議：直接在手機 LINE 點開該張秩序冊相片，點右下角 [T] 文字辨識 ➔ 複製全部，再貼到下方的「⚡ 貼上 LINE / 文字名單」即可 1 秒 100% 精準解析！');
+                return;
+            }
+
+            this.pdfParsedTeams = allResults;
+            this.renderPdfPreviewPanel(allResults);
+
+        } catch (err) {
+            console.error('檔案解析失敗:', err);
+            if (progressBar) progressBar.style.display = 'none';
+            alert('❌ 檔案讀取或辨識失敗：' + (err.message || err));
+        } finally {
+            event.target.value = '';
+        }
+    }
+
+    renderPdfPreviewPanel(teams) {
+        const panel = document.getElementById('opp-pdf-preview-panel');
+        const title = document.getElementById('opp-pdf-preview-title');
+        const list = document.getElementById('opp-pdf-preview-list');
+        if (!panel || !list) return;
+
+        title.textContent = `🎉 成功辨識出 ${teams.length} 支隊伍！請勾選欲匯入的學校：`;
+        list.innerHTML = teams.map((t, idx) => {
+            const sampleNames = t.players.slice(0, 3).map(p => `#${p.number} ${p.name}`).join(', ');
+            return `
+                <div style="background:var(--bg-secondary);padding:8px 10px;border-radius:8px;border:1.5px solid #10b981;">
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:800;color:#6ee7b7;font-size:0.86rem;margin-bottom:3px;">
+                        <input type="checkbox" class="pdf-import-cb" data-idx="${idx}" checked>
+                        🏫 ${t.schoolName} (${t.players.length} 人)
+                    </label>
+                    <div style="font-size:0.75rem;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                        ${sampleNames} ...
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        panel.style.display = 'block';
+    }
+
+    toggleAllPdfPreviewTeams(checkAll) {
+        document.querySelectorAll('.pdf-import-cb').forEach(cb => {
+            cb.checked = checkAll;
+        });
+    }
+
+    confirmImportPdfRosters() {
+        if (!Array.isArray(this.pdfParsedTeams) || this.pdfParsedTeams.length === 0) return;
+        const cbs = document.querySelectorAll('.pdf-import-cb:checked');
+        const selectedIndices = Array.from(cbs).map(cb => parseInt(cb.getAttribute('data-idx'), 10));
+        const selectedTeams = selectedIndices.map(idx => this.pdfParsedTeams[idx]).filter(Boolean);
+
+        if (selectedTeams.length === 0) {
+            alert('請至少勾選一所要匯入的隊伍！');
+            return;
+        }
+
+        window.store.saveOpponentRostersBatch(selectedTeams);
+
+        const previewPanel = document.getElementById('opp-pdf-preview-panel');
+        if (previewPanel) previewPanel.style.display = 'none';
+
+        this.oppModalCurrentTeam = selectedTeams[0].schoolName;
+        this.renderOpponentRosterModal();
+        this.populateOpponentPresets();
+        this.updateSetupTeamLineups(true);
+
+        alert(`✅ 成功匯入 ${selectedTeams.length} 支對手學校隊伍名冊！\n\n您現在可以在開賽下拉選單中直接選擇對手學校進行排棒。`);
+    }
+
+    clearAllOpponentTeamsFromModal() {
+        const teams = window.store.getOpponentTeamsList ? window.store.getOpponentTeamsList() : [];
+        if (teams.length === 0) {
+            alert('目前名冊庫已經是空的囉！');
+            return;
+        }
+        if (!confirm('確定要清空所有已預錄的對手學校名冊嗎？（此動作無法復原）')) return;
+        window.store.clearAllOpponentRosters();
+        this.oppModalCurrentTeam = '';
+        this.renderOpponentRosterModal();
+        this.populateOpponentPresets();
+        this.updateSetupTeamLineups(true);
+        alert('🗑️ 已清空所有對手學校名冊。');
+    }
+
+    renderOpponentRosterModal() {
+        this.renderOpponentModalTeamsList();
+        this.renderOpponentModalPlayersTable();
+    }
+
+    renderOpponentModalTeamsList() {
+        const listEl = document.getElementById('opp-modal-teams-list');
+        if (!listEl) return;
+        const teams = window.store.getOpponentTeamsList ? window.store.getOpponentTeamsList() : [];
+        listEl.innerHTML = teams.map(t => {
+            const isCur = (t === this.oppModalCurrentTeam);
+            const count = (window.store.getOpponentPlayers(t) || []).length;
+            return `
+                <div style="display:flex;align-items:center;justify-content:space-between;background:${isCur ? 'rgba(56,189,248,0.22)' : 'var(--bg-secondary)'};padding:7px 10px;border-radius:8px;border:1.5px solid ${isCur ? '#38bdf8' : 'var(--border-color)'};cursor:pointer;" onclick="app.selectOpponentTeamInModal('${t}')">
+                    <span style="font-weight:${isCur ? '900' : '600'};color:${isCur ? '#7dd3fc' : 'var(--text-primary)'};">
+                        🏫 ${t}
+                    </span>
+                    <span style="font-size:0.75rem;color:var(--text-secondary);">
+                        ${count} 位選手
+                    </span>
+                </div>
+            `;
+        }).join('') || '<div style="color:var(--text-secondary);font-size:0.8rem;padding:8px;">尚未有預錄的學校</div>';
+    }
+
+    selectOpponentTeamInModal(teamName) {
+        this.oppModalCurrentTeam = teamName;
+        this.renderOpponentRosterModal();
+    }
+
+    addNewOpponentTeamFromModal() {
+        const input = document.getElementById('opp-modal-new-team-name');
+        const name = input ? input.value.trim() : '';
+        if (!name) {
+            alert('請輸入學校名稱！');
+            return;
+        }
+        if (!window.store.data.opponentRosters) window.store.data.opponentRosters = {};
+        if (window.store.data.opponentRosters[name]) {
+            alert('此學校名稱已存在！');
+            this.selectOpponentTeamInModal(name);
+            return;
+        }
+        const defaultPlayers = Array.from({ length: 9 }, (_, i) => ({
+            id: `opp_${Date.now()}_${i + 1}`,
+            number: `${i + 1}`,
+            name: `選手 ${i + 1}`,
+            pos: i === 0 ? '投手' : (i === 1 ? '捕手' : '野手'),
+            teamId: 'OPP'
+        }));
+        window.store.saveOpponentRoster(name, defaultPlayers);
+        input.value = '';
+        this.oppModalCurrentTeam = name;
+        this.renderOpponentRosterModal();
+        this.populateOpponentPresets();
+    }
+
+    deleteCurrentOpponentTeamFromModal() {
+        if (!this.oppModalCurrentTeam) return;
+        if (!confirm(`確定要刪除【${this.oppModalCurrentTeam}】的秩序冊名單嗎？`)) return;
+        window.store.deleteOpponentRoster(this.oppModalCurrentTeam);
+        const list = window.store.getOpponentTeamsList ? window.store.getOpponentTeamsList() : [];
+        this.oppModalCurrentTeam = list.length > 0 ? list[0] : '';
+        this.renderOpponentRosterModal();
+        this.populateOpponentPresets();
+        this.updateSetupTeamLineups(true);
+    }
+
+    renderOpponentModalPlayersTable() {
+        const titleEl = document.getElementById('opp-modal-cur-team-title');
+        const tbody = document.getElementById('opp-modal-players-tbody');
+        if (!titleEl || !tbody) return;
+
+        titleEl.textContent = `📝 編輯名冊：${this.oppModalCurrentTeam || '(未選擇學校)'}`;
+        if (!this.oppModalCurrentTeam) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:12px;color:var(--text-secondary);">請先在左側選擇或新增一所學校</td></tr>';
+            return;
+        }
+
+        const players = window.store.getOpponentPlayers(this.oppModalCurrentTeam);
+        tbody.innerHTML = players.map((p, idx) => `
+            <tr data-row-idx="${idx}">
+                <td style="padding:3px;">
+                    <input type="text" class="form-control opp-row-num" style="padding:4px 6px;font-size:0.82rem;" value="${p.number || ''}" placeholder="背號">
+                </td>
+                <td style="padding:3px;">
+                    <input type="text" class="form-control opp-row-name" style="padding:4px 6px;font-size:0.82rem;" value="${p.name || ''}" placeholder="選手姓名">
+                </td>
+                <td style="padding:3px;">
+                    <input type="text" class="form-control opp-row-pos" style="padding:4px 6px;font-size:0.82rem;" value="${p.pos || '選手'}" placeholder="守位">
+                </td>
+                <td style="padding:3px;text-align:center;">
+                    <button type="button" class="btn btn-danger" style="padding:2px 6px;font-size:0.75rem;" onclick="this.closest('tr').remove()">✕</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    addOpponentRosterRow() {
+        const tbody = document.getElementById('opp-modal-players-tbody');
+        if (!tbody) return;
+        const curRows = tbody.querySelectorAll('tr').length;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="padding:3px;">
+                <input type="text" class="form-control opp-row-num" style="padding:4px 6px;font-size:0.82rem;" value="${curRows + 1}" placeholder="背號">
+            </td>
+            <td style="padding:3px;">
+                <input type="text" class="form-control opp-row-name" style="padding:4px 6px;font-size:0.82rem;" value="" placeholder="選手姓名">
+            </td>
+            <td style="padding:3px;">
+                <input type="text" class="form-control opp-row-pos" style="padding:4px 6px;font-size:0.82rem;" value="選手" placeholder="守位">
+            </td>
+            <td style="padding:3px;text-align:center;">
+                <button type="button" class="btn btn-danger" style="padding:2px 6px;font-size:0.75rem;" onclick="this.closest('tr').remove()">✕</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    }
+
+    parseAndApplyOpponentRosterBatch() {
+        const textarea = document.getElementById('opp-modal-batch-text');
+        const text = textarea ? textarea.value.trim() : '';
+        if (!text) {
+            alert('請先在文字框中貼上秩序冊或 LINE 傳送的選手名冊！');
+            return;
+        }
+
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        const parsed = [];
+        let autoNum = 1;
+
+        lines.forEach(line => {
+            const tokens = line.split(/[、\s\t,]+/).filter(Boolean);
+            if (tokens.length === 0) return;
+
+            let num = '';
+            let name = '';
+            let pos = '選手';
+
+            if (/^#?\d+$/.test(tokens[0])) {
+                num = tokens[0].replace('#', '');
+                name = tokens[1] || `選手 ${num}`;
+                pos = tokens.slice(2).join(' ') || '選手';
+            } else {
+                num = `${autoNum++}`;
+                name = tokens[0];
+                pos = tokens.slice(1).join(' ') || '選手';
+            }
+
+            parsed.push({ number: num, name, pos });
+        });
+
+        if (parsed.length === 0) {
+            alert('未能解析出選手資料，請確認格式每行包含「背號 姓名」或「姓名」！');
+            return;
+        }
+
+        const tbody = document.getElementById('opp-modal-players-tbody');
+        if (tbody) {
+            tbody.innerHTML = parsed.map(p => `
+                <tr>
+                    <td style="padding:3px;">
+                        <input type="text" class="form-control opp-row-num" style="padding:4px 6px;font-size:0.82rem;" value="${p.number}" placeholder="背號">
+                    </td>
+                    <td style="padding:3px;">
+                        <input type="text" class="form-control opp-row-name" style="padding:4px 6px;font-size:0.82rem;" value="${p.name}" placeholder="選手姓名">
+                    </td>
+                    <td style="padding:3px;">
+                        <input type="text" class="form-control opp-row-pos" style="padding:4px 6px;font-size:0.82rem;" value="${p.pos}" placeholder="守位">
+                    </td>
+                    <td style="padding:3px;text-align:center;">
+                        <button type="button" class="btn btn-danger" style="padding:2px 6px;font-size:0.75rem;" onclick="this.closest('tr').remove()">✕</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        alert(`✅ 成功解析 ${parsed.length} 位選手名單！請確認下方表格無誤後，點擊「💾 儲存名冊設定」。`);
+    }
+
+    saveOpponentRosterFromModal() {
+        if (!this.oppModalCurrentTeam) {
+            alert('請選擇要儲存的學校！');
+            return;
+        }
+        const tbody = document.getElementById('opp-modal-players-tbody');
+        if (!tbody) return;
+
+        const rows = tbody.querySelectorAll('tr');
+        const players = [];
+        const prefix = this.oppModalCurrentTeam.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '').slice(0, 8);
+
+        rows.forEach((r, idx) => {
+            const num = r.querySelector('.opp-row-num')?.value.trim() || `${idx + 1}`;
+            const name = r.querySelector('.opp-row-name')?.value.trim();
+            const pos = r.querySelector('.opp-row-pos')?.value.trim() || '選手';
+            if (name) {
+                players.push({
+                    id: `opp_${prefix}_${num}`,
+                    number: num,
+                    name: name,
+                    pos: pos,
+                    teamId: 'OPP'
+                });
+            }
+        });
+
+        if (players.length === 0) {
+            alert('名冊至少需填入一位選手姓名！');
+            return;
+        }
+
+        window.store.saveOpponentRoster(this.oppModalCurrentTeam, players);
+
+        const oppNameInput = document.getElementById('setup-opp-name');
+        if (oppNameInput) oppNameInput.value = this.oppModalCurrentTeam;
+        this.populateOpponentPresets();
+        this.updateSetupTeamLineups(true);
+        this.closeModal('opponent-roster-modal');
+        alert(`💾 已成功儲存【${this.oppModalCurrentTeam}】秩序冊名單（共 ${players.length} 位選手）！已自動套用至開賽打序。`);
     }
 
     closeModal(id) {
