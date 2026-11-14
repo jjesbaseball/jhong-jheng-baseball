@@ -482,45 +482,98 @@ class LiveScorebook {
         let runsScored = 0;
         const scoredPlayers = [];
         const b = this.state.bases;
+        const oldFirst = b.first;
+        const oldSecond = b.second;
+        const oldThird = b.third;
 
-        if (basesCount === 1 && batterRunner.isWalk) {
-            if (b.first && b.second && b.third) {
+        if (basesCount === 1) {
+            // 一壘安打 (1B) / 保送 (BB/HBP) / 失誤 (ROE)：打者上一壘
+            // 除非壘上跑者強制進壘，否則不移動壘上跑者
+            if (oldFirst && oldSecond && oldThird) {
+                // 滿壘：全部強制進壘，三壘跑者回本壘得分
                 runsScored += 1;
-                scoredPlayers.push(b.third);
-                b.third = b.second;
-                b.second = b.first;
+                scoredPlayers.push(oldThird);
+                b.third = oldSecond;
+                b.second = oldFirst;
                 b.first = batterRunner;
-            } else if (b.first && b.second) {
-                b.third = b.second;
-                b.second = b.first;
+            } else if (oldFirst && oldSecond) {
+                // 一二壘有人：一二壘強制進壘，三壘若是空的補上
+                b.third = oldSecond;
+                b.second = oldFirst;
                 b.first = batterRunner;
-            } else if (b.first) {
-                b.second = b.first;
+            } else if (oldFirst && oldThird) {
+                // 一三壘有人：一壘跑者被強制推至二壘；三壘跑者「非強制進壘」，留在三壘！
+                b.third = oldThird;
+                b.second = oldFirst;
+                b.first = batterRunner;
+            } else if (oldFirst) {
+                // 僅一壘有人：一壘跑者強制進二壘
+                b.second = oldFirst;
                 b.first = batterRunner;
             } else {
+                // 一壘無人：打者上一壘；二壘、三壘跑者「非強制進壘」，皆留在原壘包！
                 b.first = batterRunner;
             }
-        } else if (basesCount === 1) {
-            if (b.third) { runsScored++; scoredPlayers.push(b.third); b.third = null; }
-            if (b.second) { b.third = b.second; b.second = null; }
-            if (b.first) { b.second = b.first; b.first = null; }
-            b.first = batterRunner;
         } else if (basesCount === 2) {
-            if (b.third) { runsScored++; scoredPlayers.push(b.third); b.third = null; }
-            if (b.second) { runsScored++; scoredPlayers.push(b.second); b.second = null; }
-            if (b.first) { b.third = b.first; b.first = null; }
+            // 二壘安打 (2B)：打者上二壘
+            // 除非壘上跑者強制進壘，否則不移動壘上跑者
+            b.first = null;
             b.second = batterRunner;
+
+            if (oldFirst && oldSecond && oldThird) {
+                // 滿壘：二、三壘跑者強制回本壘得分，一壘跑者強制推上三壘
+                runsScored += 2;
+                scoredPlayers.push(oldThird, oldSecond);
+                b.third = oldFirst;
+            } else if (oldFirst && oldSecond) {
+                // 一二壘有人：二壘跑者回本壘得分，一壘跑者推進至三壘
+                runsScored += 1;
+                scoredPlayers.push(oldSecond);
+                b.third = oldFirst;
+            } else if (oldSecond && oldThird) {
+                // 二三壘有人：二壘跑者推至三壘，三壘跑者推回本壘得分
+                runsScored += 1;
+                scoredPlayers.push(oldThird);
+                b.third = oldSecond;
+            } else if (oldFirst && oldThird) {
+                // 一三壘有人：一壘跑者推至三壘，三壘跑者推回本壘得分
+                runsScored += 1;
+                scoredPlayers.push(oldThird);
+                b.third = oldFirst;
+            } else if (oldSecond) {
+                // 僅二壘有人：二壘跑者推至三壘
+                b.third = oldSecond;
+            } else if (oldFirst) {
+                // 僅一壘有人：一壘跑者推至三壘
+                b.third = oldFirst;
+            } else if (oldThird) {
+                // 僅三壘有人：三壘跑者非強制進壘，留在三壘！
+                b.third = oldThird;
+            }
         } else if (basesCount === 3) {
-            ['third', 'second', 'first'].forEach(k => {
-                if (b[k]) { runsScored++; scoredPlayers.push(b[k]); b[k] = null; }
+            // 三壘安打 (3B)：打者上三壘，所有壘上跑者皆強制回本壘得分
+            [oldThird, oldSecond, oldFirst].forEach(runner => {
+                if (runner) {
+                    runsScored += 1;
+                    scoredPlayers.push(runner);
+                }
             });
+            b.first = null;
+            b.second = null;
             b.third = batterRunner;
         } else if (basesCount === 4) {
-            ['third', 'second', 'first'].forEach(k => {
-                if (b[k]) { runsScored++; scoredPlayers.push(b[k]); b[k] = null; }
+            // 全壘打 (HR)：壘上跑者與打者全部回本壘得分
+            [oldThird, oldSecond, oldFirst].forEach(runner => {
+                if (runner) {
+                    runsScored += 1;
+                    scoredPlayers.push(runner);
+                }
             });
-            runsScored++;
+            runsScored += 1;
             scoredPlayers.push(batterRunner);
+            b.first = null;
+            b.second = null;
+            b.third = null;
         }
 
         return { runsScored, scoredPlayers };
@@ -696,7 +749,19 @@ class LiveScorebook {
             if (pLine) pLine.outs += 1;
             this.state.bases[baseKey] = null;
             this.state.outs += 1;
-            this.addLog(`${runner.name} 盜壘失敗`);
+            this.addLog(`${runner.name} 盜壘失敗出局`);
+            if (this.state.outs >= 3) this.switchHalfInning(false);
+        } else if (action === 'TAG_OUT') {
+            if (pLine) pLine.outs += 1;
+            this.state.bases[baseKey] = null;
+            this.state.outs += 1;
+            this.addLog(`${runner.name} 遭觸殺出局`);
+            if (this.state.outs >= 3) this.switchHalfInning(false);
+        } else if (action === 'RUNNER_ERROR') {
+            if (pLine) pLine.outs += 1;
+            this.state.bases[baseKey] = null;
+            this.state.outs += 1;
+            this.addLog(`${runner.name} 跑壘失誤出局`);
             if (this.state.outs >= 3) this.switchHalfInning(false);
         } else if (action === 'WP') {
             if (pLine) pLine.wp += 1;
@@ -767,11 +832,15 @@ class LiveScorebook {
         this.saveLiveState();
     }
 
-    finalizeGame(decisions = {}, fallbackState = null) {
+    finalizeGame(decisions = {}, fallbackState = null, rulingOptions = {}) {
         const targetChannel = this.activeChannel;
         const rawSt = this.channels[targetChannel] || fallbackState;
         if (!rawSt) return null;
         const st = this.normalizeState(rawSt);
+
+        const rawOverride = rulingOptions && rulingOptions.resultOverride ? String(rulingOptions.resultOverride) : '';
+        const resultOverride = (rawOverride === 'away' || rawOverride === 'home' || rawOverride === 'tie') ? rawOverride : '';
+        const rulingNote = rulingOptions && rulingOptions.rulingNote ? String(rulingOptions.rulingNote).trim() : '';
 
         const battingStatsObj = st.battingStats || {};
         const pitchingStatsObj = st.pitchingStats || {};
@@ -796,6 +865,24 @@ class LiveScorebook {
         const awayLines = Array.isArray(st.lineScore?.away) ? st.lineScore.away : [Number(st.awayScore) || 0];
         const homeLines = Array.isArray(st.lineScore?.home) ? st.lineScore.home : [Number(st.homeScore) || 0];
 
+        const playByPlayList = Array.isArray(st.playByPlay) ? st.playByPlay.slice().reverse() : [];
+        if (resultOverride) {
+            const awayTeam = (typeof window !== 'undefined' && window.store && typeof window.store.getTeam === 'function')
+                ? window.store.getTeam(st.awayTeamId, st.opponentName)
+                : { name: '客隊' };
+            const homeTeam = (typeof window !== 'undefined' && window.store && typeof window.store.getTeam === 'function')
+                ? window.store.getTeam(st.homeTeamId, st.opponentName)
+                : { name: '主隊' };
+            const winnerLabel = resultOverride === 'away'
+                ? `${awayTeam.name} 獲勝`
+                : (resultOverride === 'home' ? `${homeTeam.name} 獲勝` : '雙方平手/和局');
+            playByPlayList.push({
+                inning: `${curInn}局${st.half === 'top' ? '上' : '下'}`,
+                time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }),
+                text: `⚖️ 直接結束比賽（紀錄組裁定：${winnerLabel}${rulingNote ? '，原因：' + rulingNote : ''}）`
+            });
+        }
+
         const finishedGame = {
             id: st.id || ('g_' + Date.now()),
             date: st.date || new Date().toISOString().slice(0, 10),
@@ -807,6 +894,8 @@ class LiveScorebook {
             sameTeamPitcher: st.sameTeamPitcher !== false,
             awayScore: Number(st.awayScore) || 0,
             homeScore: Number(st.homeScore) || 0,
+            resultOverride,
+            rulingNote,
             awayHits: Number(st.awayHits) || 0,
             homeHits: Number(st.homeHits) || 0,
             awayErrors: Number(st.awayErrors) || 0,
@@ -818,7 +907,7 @@ class LiveScorebook {
             },
             battingStats: batArray,
             pitchingStats: pitArray,
-            playByPlay: Array.isArray(st.playByPlay) ? st.playByPlay.slice().reverse() : []
+            playByPlay: playByPlayList
         };
 
         if (!window.store.data) window.store.data = {};

@@ -21,6 +21,24 @@ const StatsEngine = {
     },
 
     /**
+     * 判定單場比賽勝負結果（優先尊重紀錄組裁定 g.resultOverride: 'away' | 'home' | 'tie'）
+     * 回傳: { winner: 'away' | 'home' | 'tie', isRuling: boolean, rulingNote: string }
+     */
+    getGameOutcome(g) {
+        if (!g) return { winner: 'tie', isRuling: false, rulingNote: '' };
+        const override = g.resultOverride || '';
+        const note = g.rulingNote || '';
+        if (override === 'away' || override === 'home' || override === 'tie') {
+            return { winner: override, isRuling: true, rulingNote: note };
+        }
+        const aScore = Number(g.awayScore) || 0;
+        const hScore = Number(g.homeScore) || 0;
+        if (aScore > hScore) return { winner: 'away', isRuling: false, rulingNote: note };
+        if (hScore > aScore) return { winner: 'home', isRuling: false, rulingNote: note };
+        return { winner: 'tie', isRuling: false, rulingNote: note };
+    },
+
+    /**
      * 計算三隊聯盟戰績榜 (CPBL Standings + 對戰成績 + 團隊攻守數據)
      */
     getTeamStandings(data) {
@@ -61,16 +79,17 @@ const StatsEngine = {
             const home = map[g.homeTeamId];
             const aScore = Number(g.awayScore) || 0;
             const hScore = Number(g.homeScore) || 0;
+            const outcome = this.getGameOutcome(g);
 
             if (away) {
                 away.g += 1;
                 away.rs += aScore;
                 away.ra += hScore;
-                if (aScore > hScore) {
+                if (outcome.winner === 'away') {
                     away.w += 1;
                     away.recent.push('W');
                     if (away.vs[g.homeTeamId]) away.vs[g.homeTeamId].w += 1;
-                } else if (aScore < hScore) {
+                } else if (outcome.winner === 'home') {
                     away.l += 1;
                     away.recent.push('L');
                     if (away.vs[g.homeTeamId]) away.vs[g.homeTeamId].l += 1;
@@ -85,11 +104,11 @@ const StatsEngine = {
                 home.g += 1;
                 home.rs += hScore;
                 home.ra += aScore;
-                if (hScore > aScore) {
+                if (outcome.winner === 'home') {
                     home.w += 1;
                     home.recent.push('W');
                     if (home.vs[g.awayTeamId]) home.vs[g.awayTeamId].w += 1;
-                } else if (hScore < aScore) {
+                } else if (outcome.winner === 'away') {
                     home.l += 1;
                     home.recent.push('L');
                     if (home.vs[g.awayTeamId]) home.vs[g.awayTeamId].l += 1;
@@ -191,10 +210,14 @@ const StatsEngine = {
             summary.rs += ourScore;
             summary.ra += oppScore;
 
-            if (ourScore > oppScore) {
+            const outcome = this.getGameOutcome(g);
+            const ourSide = jjIsAway ? 'away' : 'home';
+            const oppSide = jjIsAway ? 'home' : 'away';
+
+            if (outcome.winner === ourSide) {
                 summary.w += 1;
                 summary.recent.push('W');
-            } else if (ourScore < oppScore) {
+            } else if (outcome.winner === oppSide) {
                 summary.l += 1;
                 summary.recent.push('L');
             } else {

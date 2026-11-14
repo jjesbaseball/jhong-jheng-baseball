@@ -143,13 +143,18 @@ class BaseballApp {
                 const ourScore = jjIsAway ? g.awayScore : g.homeScore;
                 const oppScore = jjIsAway ? g.homeScore : g.awayScore;
                 const oppTeam = window.store.getTeam(jjIsAway ? g.homeTeamId : g.awayTeamId, g.opponentName);
-                const resBadge = ourScore > oppScore
+                const outcome = StatsEngine.getGameOutcome(g);
+                const ourSide = jjIsAway ? 'away' : 'home';
+                const resBadge = outcome.winner === ourSide
                     ? '<span style="color:#34d399;font-weight:900;">勝</span>'
-                    : (ourScore < oppScore ? '<span style="color:#f87171;font-weight:900;">敗</span>' : '<span style="color:#fbbf24;font-weight:900;">和</span>');
+                    : (outcome.winner === 'tie' ? '<span style="color:#fbbf24;font-weight:900;">和</span>' : '<span style="color:#f87171;font-weight:900;">敗</span>');
+                const rulingTag = outcome.isRuling
+                    ? `<span style="color:#fbbf24;font-size:0.72rem;font-weight:800;">(⚖️裁定${outcome.rulingNote ? ':' + outcome.rulingNote : ''})</span>`
+                    : '';
                 return `
-                    <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;background:rgba(6,21,39,0.7);border-radius:6px;font-size:0.8rem;cursor:pointer;" onclick="app.openGameBoxScoreModal('${g.id}')" title="點擊查看或編輯此場數據">
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;background:rgba(6,21,39,0.7);border-radius:6px;font-size:0.8rem;cursor:pointer;${outcome.isRuling ? 'border:1px solid rgba(251,191,36,0.45);' : ''}" onclick="app.openGameBoxScoreModal('${g.id}')" title="點擊查看或編輯此場數據">
                         <span>📅 ${g.date} vs <strong>${oppTeam.name}</strong></span>
-                        <span>${resBadge} <strong>${ourScore} : ${oppScore}</strong> ✏️</span>
+                        <span>${resBadge} <strong>${ourScore} : ${oppScore}</strong> ${rulingTag} ✏️</span>
                     </div>
                 `;
             }).join('') || '<div style="font-size:0.82rem;color:var(--text-secondary);">尚無對外比賽紀錄，點擊右方「📝 賽後補打對外比賽紀錄」即可立刻新增！</div>';
@@ -1663,7 +1668,13 @@ class BaseballApp {
                         🏃 盜壘成功 (SB)<small>進一壘並記 1 次盜壘</small>
                     </button>
                     <button class="touch-btn btn-out" onclick="app.execRunnerAction('CS')">
-                        🚫 盜壘失敗 (CS)<small>跑者出局 (+1 Out)</small>
+                        🚫 盜壘失敗 (CS)<small>抓盜壘出局 (+1 Out)</small>
+                    </button>
+                    <button class="touch-btn btn-out" onclick="app.execRunnerAction('TAG_OUT')">
+                        🛑 觸殺出局<small>牽制/夾殺/觸殺 (+1 Out)</small>
+                    </button>
+                    <button class="touch-btn btn-out" onclick="app.execRunnerAction('RUNNER_ERROR')">
+                        💥 跑壘失誤<small>跑壘判斷失誤出局 (+1 Out)</small>
                     </button>
                     <button class="touch-btn btn-walk" onclick="app.execRunnerAction('WP')">
                         ⚡ 暴投/捕逸推進<small>推進一壘 (投手+1暴投)</small>
@@ -1993,7 +2004,7 @@ class BaseballApp {
         this.renderScorebookView();
     }
 
-    openFinalizeGameModal() {
+    openFinalizeGameModal(mode = 'normal') {
         const rawSt = window.scorebook.state;
         if (!rawSt) {
             alert('目前沒有正在進行中的比賽可結算！');
@@ -2005,13 +2016,34 @@ class BaseballApp {
             localStorage.setItem('JJ_PENDING_FINALIZE_BACKUP', JSON.stringify(st));
         } catch (e) {}
 
-        const awayTeam = window.store.getTeam(st.awayTeamId);
-        const homeTeam = window.store.getTeam(st.homeTeamId);
+        const isRulingMode = mode === 'ruling';
+        const awayTeam = window.store.getTeam(st.awayTeamId, st.opponentName);
+        const homeTeam = window.store.getTeam(st.homeTeamId, st.opponentName);
         const modal = document.getElementById('runner-action-modal');
         const title = document.getElementById('runner-modal-title');
         const body = document.getElementById('runner-modal-body');
 
-        title.textContent = '🏁 結束比賽並結算兩隊成績入庫';
+        title.textContent = isRulingMode
+            ? '⚖️ 直接結束比賽（由紀錄組決定最終勝負）'
+            : '🏁 結束比賽並結算兩隊成績入庫';
+
+        let defaultOverride = '';
+        if (isRulingMode) {
+            if (st.awayTeamId === 'JJ') defaultOverride = 'away';
+            else if (st.homeTeamId === 'JJ') defaultOverride = 'home';
+            else defaultOverride = 'away';
+        }
+        const defaultNote = isRulingMode ? '對手棄賽' : '';
+
+        const suggestedOutcome = StatsEngine.getGameOutcome({
+            awayScore: st.awayScore,
+            homeScore: st.homeScore,
+            resultOverride: defaultOverride,
+            rulingNote: defaultNote
+        });
+        const winTeamId = suggestedOutcome.winner === 'away' ? st.awayTeamId : (suggestedOutcome.winner === 'home' ? st.homeTeamId : '');
+        const loseTeamId = suggestedOutcome.winner === 'away' ? st.homeTeamId : (suggestedOutcome.winner === 'home' ? st.awayTeamId : '');
+
         const allPitcherIds = Array.from(new Set([
             ...(Array.isArray(st.pitcherOrder) ? st.pitcherOrder : []),
             ...Object.keys(st.pitchingStats || {})
@@ -2021,19 +2053,17 @@ class BaseballApp {
             const p = window.store.getPlayer(pid) || { name: '投手', number: '' };
             const pl = (st.pitchingStats || {})[pid];
             if (!pl) return '';
-            const tm = window.store.getTeam(pl.teamId);
+            const tm = window.store.getTeam(pl.teamId, st.opponentName);
             // 預設自動預選勝投/敗投方便教練一鍵確認
             let defaultDec = pl.decision || '';
-            if (!defaultDec && st.awayScore !== st.homeScore) {
-                const winTeamId = st.awayScore > st.homeScore ? st.awayTeamId : st.homeTeamId;
-                const loseTeamId = st.awayScore > st.homeScore ? st.homeTeamId : st.awayTeamId;
+            if (!defaultDec && winTeamId && loseTeamId) {
                 if (pl.teamId === winTeamId && pl.gs) defaultDec = 'W';
                 else if (pl.teamId === loseTeamId && pl.gs) defaultDec = 'L';
             }
             return `
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border-color);">
                     <span>${tm.emoji} <strong>#${p.number} ${p.name}</strong> (${StatsEngine.formatIP(pl.outs)}局, 失${pl.r}分, ${pl.so}K)</span>
-                    <select class="form-control pitcher-decision-select" data-pid="${pid}" style="width:155px;">
+                    <select class="form-control pitcher-decision-select" data-pid="${pid}" data-tid="${pl.teamId || ''}" data-gs="${pl.gs ? 1 : 0}" style="width:155px;">
                         <option value="" ${defaultDec === '' ? 'selected' : ''}>無勝敗/中繼</option>
                         <option value="W" ${defaultDec === 'W' ? 'selected' : ''}>勝投 (W)</option>
                         <option value="L" ${defaultDec === 'L' ? 'selected' : ''}>敗投 (L)</option>
@@ -2044,23 +2074,90 @@ class BaseballApp {
             `;
         }).join('');
 
+        const reasonChips = ['對手棄賽', '對方人數不足棄權', '大會時間到裁定', '天雨裁定結束', '違反大會規定奪權比賽'];
+
         body.innerHTML = `
             <div style="background:var(--bg-primary);padding:14px;border-radius:10px;margin-bottom:14px;text-align:center;">
                 <div style="font-size:0.85rem;color:var(--text-secondary);">${st.tournament}</div>
                 <div style="font-size:1.35rem;font-weight:900;color:var(--cpbl-gold);margin-top:4px;">
                     ${awayTeam.emoji}${awayTeam.name} ${st.awayScore} : ${st.homeScore} ${homeTeam.emoji}${homeTeam.name}
                 </div>
+                <div style="font-size:0.78rem;color:var(--text-secondary);margin-top:4px;">
+                    （目前進度：${st.inning}局${st.half === 'top' ? '上' : '下'}，現場球員投打統計將會完整保留）
+                </div>
             </div>
+
+            <div style="background:${isRulingMode ? 'rgba(245,158,11,0.14)' : 'rgba(15,23,42,0.55)'};border:1.5px solid ${isRulingMode ? '#f59e0b' : 'var(--border-color)'};border-radius:12px;padding:12px 14px;margin-bottom:14px;">
+                <div style="font-size:0.88rem;font-weight:900;color:${isRulingMode ? '#fbbf24' : 'var(--jj-gold-light)'};margin-bottom:8px;">
+                    ⚖️ 比賽勝負結果判定（如對手棄賽／奪權比賽，不依目前比數結算，請由此指定勝方）：
+                </div>
+                <select id="finalize-result-override" class="form-control" style="font-weight:800;margin-bottom:8px;" onchange="app.onFinalizeRulingChange()">
+                    <option value="" ${defaultOverride === '' ? 'selected' : ''}>📊 依目前現場比數自動判定勝負（${awayTeam.name} ${st.awayScore} : ${st.homeScore} ${homeTeam.name}）</option>
+                    <option value="away" ${defaultOverride === 'away' ? 'selected' : ''}>🏆 紀錄組裁定【客隊：${awayTeam.emoji}${awayTeam.name}】獲勝（不看現狀比數）</option>
+                    <option value="home" ${defaultOverride === 'home' ? 'selected' : ''}>🏆 紀錄組裁定【主隊：${homeTeam.emoji}${homeTeam.name}】獲勝（不看現狀比數）</option>
+                    <option value="tie" ${defaultOverride === 'tie' ? 'selected' : ''}>🤝 紀錄組裁定【雙方平手 / 和局】（不看現狀比數）</option>
+                </select>
+                <div id="finalize-ruling-note-wrap" style="display:${defaultOverride ? 'block' : 'none'};">
+                    <label style="font-size:0.78rem;color:#fde68a;font-weight:700;display:block;margin-bottom:4px;">📝 裁定原因 / 備註（將顯示於戰績表與比賽紀錄）：</label>
+                    <input type="text" id="finalize-ruling-note" class="form-control" value="${defaultNote}" placeholder="例如：對手棄賽、對方人數不足棄權、大會裁定..." style="margin-bottom:6px;">
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                        ${reasonChips.map(r => `<button type="button" class="btn" style="padding:3px 9px;font-size:0.74rem;border-color:rgba(251,191,36,0.5);color:#fde68a;" onclick="app.setFinalizeRulingNote('${r}')">${r}</button>`).join('')}
+                    </div>
+                </div>
+            </div>
+
             <div style="margin-bottom:16px;">
                 <div style="font-size:0.85rem;font-weight:700;color:var(--text-secondary);margin-bottom:6px;">設定本場兩隊出場投手之勝投 / 敗投 / 救援紀錄：</div>
                 ${pitcherRows || '<p style="font-size:0.85rem;color:var(--text-secondary);">無投手紀錄</p>'}
             </div>
-            <div style="display:flex;justify-content:flex-end;gap:10px;">
+            <div style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;">
                 <button type="button" class="btn" onclick="app.closeModal('runner-action-modal')">繼續記錄比賽</button>
-                <button type="button" class="btn btn-primary" onclick="app.confirmFinalizeGame()">✅ 確認結算並更新三隊戰績與排行榜</button>
+                <button type="button" class="btn ${isRulingMode ? '' : 'btn-primary'}" style="${isRulingMode ? 'background:linear-gradient(135deg,#f59e0b,#d97706);color:#061527;font-weight:900;border-color:#fde68a;' : ''}" onclick="app.confirmFinalizeGame()">
+                    ${isRulingMode ? '⚖️ 確認裁定結束並更新戰績' : '✅ 確認結算並更新戰績與排行榜'}
+                </button>
             </div>
         `;
         modal.classList.add('open');
+    }
+
+    setFinalizeRulingNote(note) {
+        const input = document.getElementById('finalize-ruling-note');
+        if (input) input.value = note || '';
+    }
+
+    onFinalizeRulingChange() {
+        const sel = document.getElementById('finalize-result-override');
+        const noteWrap = document.getElementById('finalize-ruling-note-wrap');
+        const noteInput = document.getElementById('finalize-ruling-note');
+        if (!sel) return;
+
+        const override = sel.value || '';
+        if (noteWrap) {
+            noteWrap.style.display = override ? 'block' : 'none';
+        }
+        if (override && noteInput && !noteInput.value.trim()) {
+            noteInput.value = '對手棄賽';
+        }
+
+        const st = this._pendingFinalizeState || window.scorebook?.state;
+        if (!st) return;
+
+        const outcome = StatsEngine.getGameOutcome({
+            awayScore: st.awayScore,
+            homeScore: st.homeScore,
+            resultOverride: override
+        });
+        const winTeamId = outcome.winner === 'away' ? st.awayTeamId : (outcome.winner === 'home' ? st.homeTeamId : '');
+        const loseTeamId = outcome.winner === 'away' ? st.homeTeamId : (outcome.winner === 'home' ? st.awayTeamId : '');
+
+        document.querySelectorAll('.pitcher-decision-select').forEach(pSel => {
+            const tid = pSel.getAttribute('data-tid') || '';
+            const isGs = pSel.getAttribute('data-gs') === '1';
+            if (!isGs) return;
+            if (winTeamId && tid === winTeamId) pSel.value = 'W';
+            else if (loseTeamId && tid === loseTeamId) pSel.value = 'L';
+            else if (outcome.winner === 'tie') pSel.value = '';
+        });
     }
 
     confirmFinalizeGame() {
@@ -2071,6 +2168,9 @@ class BaseballApp {
                 if (pid && sel.value) decisions[pid] = sel.value;
             });
 
+            const resultOverride = document.getElementById('finalize-result-override')?.value || '';
+            const rulingNote = resultOverride ? (document.getElementById('finalize-ruling-note')?.value || '').trim() : '';
+
             let backupState = this._pendingFinalizeState || null;
             if (!backupState) {
                 try {
@@ -2079,7 +2179,7 @@ class BaseballApp {
                 } catch (e) {}
             }
 
-            const finished = window.scorebook.finalizeGame(decisions, backupState);
+            const finished = window.scorebook.finalizeGame(decisions, backupState, { resultOverride, rulingNote });
             this._pendingFinalizeState = null;
             try { localStorage.removeItem('JJ_PENDING_FINALIZE_BACKUP'); } catch (e) {}
 
@@ -2088,9 +2188,13 @@ class BaseballApp {
             this.refreshAll();
 
             if (finished) {
-                const awayT = window.store.getTeam(finished.awayTeamId);
-                const homeT = window.store.getTeam(finished.homeTeamId);
-                alert(`🎉 比賽結算完成！\n【${awayT.name} ${finished.awayScore} : ${finished.homeScore} ${homeT.name}】\n已自動更新三隊戰績榜與個人數據排行榜！`);
+                const awayT = window.store.getTeam(finished.awayTeamId, finished.opponentName);
+                const homeT = window.store.getTeam(finished.homeTeamId, finished.opponentName);
+                const outcome = StatsEngine.getGameOutcome(finished);
+                const rulingSummary = outcome.isRuling
+                    ? `\n⚖️ 紀錄組裁定：${outcome.winner === 'away' ? `${awayT.name} 獲勝` : (outcome.winner === 'home' ? `${homeT.name} 獲勝` : '雙方平手/和局')}${outcome.rulingNote ? `（原因：${outcome.rulingNote}）` : ''}`
+                    : '';
+                alert(`🎉 比賽結算完成！\n【${awayT.name} ${finished.awayScore} : ${finished.homeScore} ${homeT.name}】${rulingSummary}\n已自動更新戰績榜與個人數據排行榜！`);
             }
         } catch (err) {
             console.error('結算比賽時發生錯誤:', err);
@@ -2749,20 +2853,29 @@ class BaseballApp {
         }
 
         container.innerHTML = allGames.map(g => {
-            const awayT = window.store.getTeam(g.awayTeamId);
-            const homeT = window.store.getTeam(g.homeTeamId);
-            const winText = g.awayScore > g.homeScore ? `${awayT.emoji}${awayT.name} 勝` : (g.homeScore > g.awayScore ? `${homeT.emoji}${homeT.name} 勝` : '雙方平手');
+            const awayT = window.store.getTeam(g.awayTeamId, g.opponentName);
+            const homeT = window.store.getTeam(g.homeTeamId, g.opponentName);
+            const outcome = StatsEngine.getGameOutcome(g);
+            const rawWinLabel = outcome.winner === 'away'
+                ? `${awayT.emoji}${awayT.name} 勝`
+                : (outcome.winner === 'home' ? `${homeT.emoji}${homeT.name} 勝` : '雙方平手');
+            const winText = outcome.isRuling
+                ? `⚖️ 裁定：${rawWinLabel}${outcome.rulingNote ? ` (${outcome.rulingNote})` : ''}`
+                : rawWinLabel;
+            const badgeStyle = outcome.isRuling
+                ? 'background:rgba(245,158,11,0.22);color:#fde68a;border:1px solid #f59e0b;'
+                : '';
             const typeTag = g.isExternal
                 ? `<span style="background:linear-gradient(135deg,#065f46,#047857);color:#a7f3d0;padding:2px 8px;border-radius:999px;font-size:0.74rem;font-weight:900;border:1px solid #34d399;">🌏 對外比賽</span>`
                 : `<span style="background:rgba(212,175,55,0.18);color:var(--jj-gold-light);padding:2px 8px;border-radius:999px;font-size:0.74rem;font-weight:900;border:1px solid rgba(212,175,55,0.4);">🏟️ 隊內三隊賽</span>`;
 
             return `
-                <div class="game-history-card" style="${g.isExternal ? 'border-color:rgba(52,211,153,0.55);' : ''}">
+                <div class="game-history-card" style="${outcome.isRuling ? 'border-color:#f59e0b;' : (g.isExternal ? 'border-color:rgba(52,211,153,0.55);' : '')}">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:6px;flex-wrap:wrap;">
                         <span style="font-size:0.8rem;color:var(--text-secondary);font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                             ${typeTag} 📅 ${g.date} ｜ ${g.tournament}
                         </span>
-                        <span class="game-result-badge win">${winText}</span>
+                        <span class="game-result-badge win" style="${badgeStyle}">${winText}</span>
                     </div>
                     <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg-primary);padding:14px 16px;border-radius:12px;margin-bottom:12px;">
                         <div>
@@ -2790,8 +2903,12 @@ class BaseballApp {
     openGameBoxScoreModal(gameId) {
         const g = (window.store.data.games || []).find(x => x.id === gameId);
         if (!g) return;
-        const awayT = window.store.getTeam(g.awayTeamId);
-        const homeT = window.store.getTeam(g.homeTeamId);
+        const awayT = window.store.getTeam(g.awayTeamId, g.opponentName);
+        const homeT = window.store.getTeam(g.homeTeamId, g.opponentName);
+        const outcome = StatsEngine.getGameOutcome(g);
+        const rulingBannerText = outcome.isRuling
+            ? ` ｜ <span style="color:#fbbf24;font-weight:900;">⚖️ 紀錄組裁定：${outcome.winner === 'away' ? `${awayT.name} 勝` : (outcome.winner === 'home' ? `${homeT.name} 勝` : '平手')}${outcome.rulingNote ? `（${outcome.rulingNote}）` : ''}</span>`
+            : '';
         const modal = document.getElementById('runner-action-modal');
         const title = document.getElementById('runner-modal-title');
         const body = document.getElementById('runner-modal-body');
@@ -2823,7 +2940,7 @@ class BaseballApp {
         body.innerHTML = `
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
                 <div style="font-size:0.9rem;color:var(--text-secondary);">
-                    ${g.isExternal ? '🌏 對外比賽紀錄' : '🏟️ 隊內三隊賽紀錄'} ｜ 終場比數：<strong style="color:var(--cpbl-gold-light);">${awayT.name} ${g.awayScore} : ${g.homeScore} ${homeT.name}</strong>
+                    ${g.isExternal ? '🌏 對外比賽紀錄' : '🏟️ 隊內三隊賽紀錄'} ｜ 終場比數：<strong style="color:var(--cpbl-gold-light);">${awayT.name} ${g.awayScore} : ${g.homeScore} ${homeT.name}</strong>${rulingBannerText}
                 </div>
                 <button class="btn btn-primary" style="padding:6px 12px;font-size:0.82rem;" onclick="app.openQuickBoxEntryModal('${g.id}')">
                     ✏️ 修改 / 補打本場選手數據
@@ -2927,6 +3044,8 @@ class BaseballApp {
         let initHomeTeam = 't2';
         let initAwayScore = 5;
         let initHomeScore = 3;
+        const initResultOverride = editGame?.resultOverride || '';
+        const initRulingNote = editGame?.rulingNote || '';
 
         if (editGame) {
             if (editGame.isExternal) {
@@ -3021,6 +3140,23 @@ class BaseballApp {
                         </select>
                         <input type="number" id="qb-home-score" class="form-control" value="${initHomeScore}" min="0" style="width:78px;">
                     </div>
+                </div>
+            </div>
+
+            <!-- C. 紀錄組裁定勝負設定 (如對手棄賽／裁定勝負) -->
+            <div class="form-grid" style="margin-bottom:12px;padding:10px 12px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,191,36,0.4);border-radius:10px;">
+                <div class="form-group" style="margin-bottom:0;">
+                    <label style="color:#fde68a;font-weight:800;">⚖️ 比賽勝負判定方式</label>
+                    <select id="qb-result-override" class="form-control" onchange="const w=document.getElementById('qb-ruling-note');if(w)w.disabled=!this.value;">
+                        <option value="" ${initResultOverride === '' ? 'selected' : ''}>📊 依總得分自動判定勝負</option>
+                        <option value="away" ${initResultOverride === 'away' ? 'selected' : ''}>🏆 紀錄組裁定【先攻客隊 (Away)】獲勝（不看比數）</option>
+                        <option value="home" ${initResultOverride === 'home' ? 'selected' : ''}>🏆 紀錄組裁定【後攻主隊 (Home)】獲勝（不看比數）</option>
+                        <option value="tie" ${initResultOverride === 'tie' ? 'selected' : ''}>🤝 紀錄組裁定【雙方平手 / 和局】（不看比數）</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label style="color:#fde68a;font-weight:800;">📝 裁定原因備註（選擇裁定時填寫）</label>
+                    <input type="text" id="qb-ruling-note" class="form-control" value="${initRulingNote}" ${initResultOverride ? '' : 'disabled'} placeholder="例如：對手棄賽、大會裁定">
                 </div>
             </div>
 
@@ -3310,6 +3446,10 @@ class BaseballApp {
             if (homeTeamId.startsWith('OPP:')) homeHits = oppPitcherHitsAllowed;
         }
 
+        const resultOverrideRaw = document.getElementById('qb-result-override')?.value || '';
+        const resultOverride = (resultOverrideRaw === 'away' || resultOverrideRaw === 'home' || resultOverrideRaw === 'tie') ? resultOverrideRaw : '';
+        const rulingNote = resultOverride ? (document.getElementById('qb-ruling-note')?.value || '').trim() : '';
+
         const gameRecord = {
             id: this._qbEditGameId || ('g_' + Date.now()),
             date,
@@ -3320,6 +3460,8 @@ class BaseballApp {
             homeTeamId,
             awayScore,
             homeScore,
+            resultOverride,
+            rulingNote,
             awayHits,
             homeHits,
             awayErrors: 0,

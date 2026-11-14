@@ -483,8 +483,11 @@
                         <div class="utility-btn-row">
                             <button class="btn" onclick="app.openChangePitcherModal()">🔄 更換投手</button>
                             <button class="btn" onclick="app.promptChangeBatter()">🔢 排序打序 / 切換棒次</button>
-                            <button class="btn btn-primary" style="margin-left:auto;" onclick="app.openFinalizeGameModal()">
-                                🏁 結束比賽並結算兩隊成績
+                            <button class="btn" style="margin-left:auto;background:linear-gradient(135deg,#f59e0b,#d97706);color:#061527;font-weight:900;border-color:#fde68a;" onclick="app.openFinalizeGameModal('ruling')">
+                                ⚖️ 直接結束比賽 (勝負由紀錄組決定)
+                            </button>
+                            <button class="btn btn-primary" onclick="app.openFinalizeGameModal('normal')">
+                                🏁 正常結束並結算成績
                             </button>
                             <button class="btn btn-danger" onclick="app.cancelLiveGame()">放棄本場</button>
                         </div>
