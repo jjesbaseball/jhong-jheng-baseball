@@ -427,6 +427,9 @@
                             <button class="touch-btn btn-ball" onclick="app.handlePitchBtn('ball')">
                                 壞球<small>Ball</small>
                             </button>
+                            <button class="touch-btn btn-walk" style="grid-column: 1 / -1;" onclick="app.handlePitchBtn('wp')">
+                                ⚡ 投手暴投<small>WP (+1暴投/壞球，壘上跑者推進一壘)</small>
+                            </button>
                         </div>
 
                         <div class="pad-group-title">
@@ -475,7 +478,10 @@
                             <button class="touch-btn btn-sac" onclick="app.handlePlayBtn('SF')">
                                 高飛犧牲打<small>SF (三壘得分)</small>
                             </button>
-                            <button class="touch-btn btn-walk" style="grid-column: span 3;" onclick="app.handlePlayBtn('ROE')">
+                            <button class="touch-btn btn-walk" style="grid-column: 1 / -1;border-color:#38bdf8;" onclick="app.handlePlayBtn('K_SAFE')">
+                                ⚡ 不死三振上壘 (Uncaught 3rd Strike) — 記 1 三振、打者上一壘、不計出局數
+                            </button>
+                            <button class="touch-btn btn-walk" style="grid-column: 1 / -1;" onclick="app.handlePlayBtn('ROE')">
                                 ⚠️ 守備失誤上壘 (Error / ROE) — 記守備方失誤 1 次、非自責分
                             </button>
                         </div>
@@ -636,11 +642,11 @@
                         <div id="settings-teams-edit-list"></div>
                     </div>
                     <div class="form-group" style="margin-bottom:12px;">
-                        <label>防禦率 (ERA) 計算基準局數</label>
+                        <label>防禦率 (ERA) 計算公式基準局數</label>
                         <select id="set-era-base" class="form-control">
-                            <option value="4" selected>4 局制（隊內比賽標準 ERA = 自責分 × 4 ÷ 局數）</option>
-                            <option value="6">6 局制（正式少棒標準 ERA = 自責分 × 6 ÷ 局數）</option>
-                            <option value="9">9 局制（職棒 CPBL 標準 ERA = 自責分 × 9 ÷ 局數）</option>
+                            <option value="9" selected>9 局制（標準棒球公式 ERA = 自責分 × 9 ÷ 投球局數）</option>
+                            <option value="6">6 局制（備選參考）</option>
+                            <option value="4">4 局制（備選參考）</option>
                         </select>
                     </div>
                     <div class="form-group" style="margin-bottom:16px;">
@@ -662,18 +668,23 @@
                         <button class="btn" onclick="app.downloadFirebaseConfigFile()">📥 下載 firebase-config.js 設定檔（供上傳 GitHub）</button>
                     </div>
 
-                    <h3 style="color:var(--cpbl-gold-light);margin-bottom:10px;">📱 本地備份與區域網路同步</h3>
+                    <h3 style="color:var(--cpbl-gold-light);margin-bottom:10px;">📦 全系統總檔下載與備份中心（含隊內爭霸 ＋ 對外比賽全部資料）</h3>
                     <p style="font-size:0.84rem;color:var(--text-secondary);margin-bottom:12px;">
-                        除了 Firebase 雲端同步外，您也可以隨時匯出/匯入 JSON 備份檔，或匯出 Excel 統計表。
+                        一鍵下載包含【🏟️ 隊內三隊爭霸賽】與【🌏 對外正式/友誼賽】的所有球員名單、投打排行榜、逐場比賽紀錄與秩序冊對手庫：
                     </p>
 
                     <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px;">
-                        <button class="btn btn-primary" onclick="app.exportJSONBackup()">📤 匯出三隊完整備份 (.json)</button>
+                        <button class="btn btn-primary" onclick="app.exportJSONBackup()">📤 匯出全系統完整總備份 (.json｜含隊內＋對外＋秩序冊)</button>
                         <label class="btn" style="cursor:pointer;">
-                            📥 匯入備份檔 (.json)
+                            📥 匯入還原總備份檔 (.json)
                             <input type="file" accept=".json" style="display:none;" onchange="app.importJSONBackup(event)">
                         </label>
-                        <button class="btn" onclick="app.exportCSVStats()">📊 匯出 Excel 統計表 (.csv)</button>
+                        <button class="btn" style="background:linear-gradient(135deg,#065f46,#047857);color:#ecfdf5;border-color:#34d399;font-weight:900;" onclick="app.exportCSVStats()">
+                            📊 下載 Excel 完整數據總表 (.csv｜含隊內＋對外投打＆逐場明細)
+                        </button>
+                        <button class="btn" style="border-color:var(--jj-gold);color:var(--jj-gold-light);font-weight:800;" onclick="app.exportExcelWorkbook()">
+                            📑 下載 Excel 多工作表分頁總檔 (.xls｜6大工作表分頁)
+                        </button>
                     </div>
 
                     <div style="padding-top:16px;border-top:1px solid var(--border-color);display:flex;gap:10px;flex-wrap:wrap;">

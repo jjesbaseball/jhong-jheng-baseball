@@ -44,7 +44,6 @@ const StatsEngine = {
     getTeamStandings(data) {
         const teams = data.teams || [];
         const games = data.games || [];
-        const eraBase = Number(data.settings?.eraInningsBase) || 6;
 
         const map = {};
         teams.forEach(t => {
@@ -59,7 +58,7 @@ const StatsEngine = {
                 g: 0, w: 0, l: 0, t: 0,
                 rs: 0, ra: 0,
                 ab: 0, h: 0, b2: 0, b3: 0, hr: 0, tb: 0, bb: 0, hbp: 0, sf: 0, sb: 0,
-                outs: 0, er: 0, so: 0, pitH: 0, pitBB: 0,
+                outs: 0, er: 0, so: 0, wp: 0, pitH: 0, pitBB: 0,
                 vs: {}, // { [oppTeamId]: { w:0, l:0, t:0 } }
                 recent: []
             };
@@ -141,6 +140,7 @@ const StatsEngine = {
                 tm.outs += (pt.outs || 0);
                 tm.er += (pt.er || 0);
                 tm.so += (pt.so || 0);
+                tm.wp += (pt.wp || 0);
                 tm.pitH += (pt.h || 0);
                 tm.pitBB += (pt.bb || 0);
             });
@@ -156,7 +156,7 @@ const StatsEngine = {
             tm.ops = tm.obp + tm.slg;
             const ip = tm.outs / 3;
             tm.ipDisplay = this.formatIP(tm.outs);
-            tm.era = ip > 0 ? (tm.er * eraBase) / ip : 0;
+            tm.era = ip > 0 ? (tm.er * 9) / ip : 0;
             tm.whip = ip > 0 ? (tm.pitH + tm.pitBB) / ip : 0;
             return tm;
         });
@@ -190,13 +190,12 @@ const StatsEngine = {
      */
     getExternalTeamSummary(data) {
         const extGames = (data.games || []).filter(g => Boolean(g.isExternal));
-        const eraBase = Number(data.settings?.eraInningsBase) || 6;
 
         const summary = {
             g: 0, w: 0, l: 0, t: 0,
             rs: 0, ra: 0,
             ab: 0, h: 0, b2: 0, b3: 0, hr: 0, tb: 0, bb: 0, hbp: 0, sf: 0, sb: 0,
-            outs: 0, er: 0, so: 0, pitH: 0, pitBB: 0,
+            outs: 0, er: 0, so: 0, wp: 0, pitH: 0, pitBB: 0,
             recent: [],
             gamesList: extGames
         };
@@ -243,6 +242,7 @@ const StatsEngine = {
                 summary.outs += (pt.outs || 0);
                 summary.er += (pt.er || 0);
                 summary.so += (pt.so || 0);
+                summary.wp += (pt.wp || 0);
                 summary.pitH += (pt.h || 0);
                 summary.pitBB += (pt.bb || 0);
             });
@@ -257,7 +257,7 @@ const StatsEngine = {
         summary.ops = summary.obp + summary.slg;
         const ip = summary.outs / 3;
         summary.ipDisplay = this.formatIP(summary.outs);
-        summary.era = ip > 0 ? (summary.er * eraBase) / ip : 0;
+        summary.era = ip > 0 ? (summary.er * 9) / ip : 0;
         summary.whip = ip > 0 ? (summary.pitH + summary.pitBB) / ip : 0;
 
         return summary;
@@ -364,7 +364,6 @@ const StatsEngine = {
         const games = mode === 'external'
             ? allGames.filter(g => Boolean(g.isExternal))
             : (mode === 'all' ? allGames : allGames.filter(g => !g.isExternal));
-        const eraBase = Number(data.settings?.eraInningsBase) || 6;
         const map = {};
 
         players.forEach(p => {
@@ -395,7 +394,7 @@ const StatsEngine = {
 
                 const gameTeamId = line.teamId || st.teamId;
                 if (!st.splitsByTeam[gameTeamId]) {
-                    st.splitsByTeam[gameTeamId] = { teamId: gameTeamId, g: 0, w: 0, l: 0, sv: 0, outs: 0, so: 0, r: 0, er: 0 };
+                    st.splitsByTeam[gameTeamId] = { teamId: gameTeamId, g: 0, w: 0, l: 0, sv: 0, outs: 0, so: 0, wp: 0, r: 0, er: 0 };
                 }
                 const sp = st.splitsByTeam[gameTeamId];
                 sp.g += 1;
@@ -404,6 +403,7 @@ const StatsEngine = {
                 if (line.decision === 'SV') sp.sv += 1;
                 sp.outs += (line.outs || 0);
                 sp.so += (line.so || 0);
+                sp.wp += (line.wp || 0);
                 sp.r += (line.r || 0);
                 sp.er += (line.er || 0);
 
@@ -432,9 +432,9 @@ const StatsEngine = {
             const ipReal = st.outs / 3;
             st.ipDisplay = this.formatIP(st.outs);
             st.ipReal = ipReal;
-            st.era = ipReal > 0 ? (st.er * eraBase) / ipReal : (st.er > 0 ? 99.99 : 0);
+            st.era = ipReal > 0 ? (st.er * 9) / ipReal : (st.er > 0 ? 99.99 : 0);
             st.whip = ipReal > 0 ? (st.h + st.bb) / ipReal : 0;
-            st.kRate = ipReal > 0 ? (st.so * eraBase) / ipReal : 0;
+            st.kRate = ipReal > 0 ? (st.so * 9) / ipReal : 0;
             st.strikePct = st.np > 0 ? (st.strikes / st.np) * 100 : 0;
             return st;
         });

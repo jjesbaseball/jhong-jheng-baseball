@@ -473,6 +473,40 @@ class LiveScorebook {
                 return;
             }
             this.addLog(`${batterName} 壞球`.trim());
+        } else if (type === 'wp') {
+            if (pLine) {
+                pLine.np += 1;
+                pLine.wp = (pLine.wp || 0) + 1;
+            }
+            const b = this.state.bases;
+            let wpRuns = 0;
+            if (b.third) {
+                const sp = b.third;
+                if (sp && sp.playerId) this.ensureBatterLine(sp.playerId, sp.teamId).r += 1;
+                wpRuns += 1;
+                b.third = null;
+            }
+            if (b.second) {
+                b.third = b.second;
+                b.second = null;
+            }
+            if (b.first) {
+                b.second = b.first;
+                b.first = null;
+            }
+            if (wpRuns > 0) {
+                this.addRuns(wpRuns, true);
+            }
+            this.state.balls += 1;
+            const pitcherLabel = pitcher ? pitcher.name : '';
+            this.addLog(`${pitcherLabel} 暴投${wpRuns > 0 ? `（失${wpRuns}分）` : ''}`.trim());
+            if (this.state.balls >= 4) {
+                this.recordPlay({ type: 'BB', autoFromPitch: true });
+                if (this.historyStack.length >= 2) {
+                    this.historyStack.pop();
+                }
+                return;
+            }
         }
 
         this.saveLiveState();
@@ -661,6 +695,20 @@ class LiveScorebook {
             }
             this.state.outs += 1;
             resultLabel = '三振出局';
+        } else if (type === 'K_SAFE') {
+            bLine.ab += 1;
+            bLine.so += 1;
+            if (pLine) {
+                pLine.so += 1;
+            }
+            const { runsScored, scoredPlayers } = this.advanceRunners(1, runnerObj);
+            scoredPlayers.forEach(sp => {
+                if (sp && sp.playerId) this.ensureBatterLine(sp.playerId, sp.teamId).r += 1;
+            });
+            if (runsScored > 0) {
+                this.addRuns(runsScored, true);
+            }
+            resultLabel = '不死三振上壘';
         } else if (type === 'GO' || type === 'FO') {
             bLine.ab += 1;
             if (pLine) pLine.outs += 1;
@@ -764,7 +812,7 @@ class LiveScorebook {
             this.addLog(`${runner.name} 跑壘失誤出局`);
             if (this.state.outs >= 3) this.switchHalfInning(false);
         } else if (action === 'WP') {
-            if (pLine) pLine.wp += 1;
+            if (pLine) pLine.wp = (pLine.wp || 0) + 1;
             this.state.bases[baseKey] = null;
             if (nextBase === 'home') {
                 if (runner.playerId) this.ensureBatterLine(runner.playerId, runner.teamId).r += 1;

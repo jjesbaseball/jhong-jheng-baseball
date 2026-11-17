@@ -11,7 +11,7 @@ const DEFAULT_LEAGUE_DATA = {
         leagueName: '中正國小少棒隊 隊內三隊爭霸聯賽',
         seasonName: 'JHONG JHENG ELEMENTARY SCHOOL BASEBALL',
         standardInnings: 4,        // 隊內比賽固定打 4 局
-        eraInningsBase: 4,         // 4局制防禦率 ERA = (ER * 4) / IP
+        eraInningsBase: 9,         // 標準棒球防禦率公式 ERA = (ER * 9) / IP
         sameTeamPitcher: true,     // 隊內練習賽：由自己隊伍的投手投給自己隊打
         pitchLimitWarning: 50,     // 隊內 4 局賽單場用球數提醒門檻
         pitchLimitMax: 65,         // 單場用球數上限警示
@@ -217,6 +217,7 @@ class DataStore {
         if (!d.settings || typeof d.settings !== 'object') {
             d.settings = JSON.parse(JSON.stringify(DEFAULT_LEAGUE_DATA.settings));
         }
+        d.settings.eraInningsBase = 9;
         d.teams = Array.isArray(d.teams) ? d.teams : (d.teams ? Object.values(d.teams) : JSON.parse(JSON.stringify(DEFAULT_LEAGUE_DATA.teams)));
         d.players = Array.isArray(d.players) ? d.players : (d.players ? Object.values(d.players) : JSON.parse(JSON.stringify(DEFAULT_LEAGUE_DATA.players)));
 
