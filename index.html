@@ -387,6 +387,38 @@
                         <!-- 當前打者 vs 投手雙邊對決資訊列 -->
                         <div id="live-matchup-info" class="matchup-bar"></div>
 
+                        <!-- 文字轉播上方同步記分板（寬度與文字轉播一致，方便隨時查看目前比分與局數） -->
+                        <div id="live-sub-scoreboard-box" class="scoreboard-box sub-scoreboard-box" style="margin-top:14px;margin-bottom:0;">
+                            <div class="scoreboard-top-meta">
+                                <span id="live-tournament-title-sub">比賽進行中</span>
+                                <span id="live-inning-badge-sub" class="inning-badge-live">1局上</span>
+                            </div>
+                            <div class="table-scroll-wrapper">
+                                <table id="live-linescore-table-sub" class="linescore-table"></table>
+                            </div>
+                            <div class="bso-pitch-strip">
+                                <div class="bso-group">
+                                    <div class="bso-item">
+                                        <span style="color:var(--ball-green);">B</span>
+                                        <span id="dot-b-1-sub" class="bso-dot"></span>
+                                        <span id="dot-b-2-sub" class="bso-dot"></span>
+                                        <span id="dot-b-3-sub" class="bso-dot"></span>
+                                    </div>
+                                    <div class="bso-item">
+                                        <span style="color:var(--strike-yellow);">S</span>
+                                        <span id="dot-s-1-sub" class="bso-dot"></span>
+                                        <span id="dot-s-2-sub" class="bso-dot"></span>
+                                    </div>
+                                    <div class="bso-item">
+                                        <span style="color:var(--out-red);">O</span>
+                                        <span id="dot-o-1-sub" class="bso-dot"></span>
+                                        <span id="dot-o-2-sub" class="bso-dot"></span>
+                                    </div>
+                                </div>
+                                <div id="live-pitch-count-pill-sub" class="pitch-limit-pill">⚾ 投手用球數：0 球</div>
+                            </div>
+                        </div>
+
                         <div class="action-pad-card play-log-card" style="margin-top:14px;">
                             <div class="pad-group-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
                                 <span>📢 即時逐球/打席文字轉播 (Play-by-Play)</span>

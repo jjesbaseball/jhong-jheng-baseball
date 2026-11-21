@@ -1174,8 +1174,14 @@ class BaseballApp {
         const { orderNo, batter, pitcher } = window.scorebook.getCurrentMatchup();
         const pTeam = pitcherTeam || battingTeam;
 
-        document.getElementById('live-tournament-title').textContent = `${st.date} ｜ ${st.tournament} (${st.maxInnings || 4}局制)`;
-        document.getElementById('live-inning-badge').textContent = window.scorebook.getInningLabel();
+        const tournamentTitleText = `${st.date} ｜ ${st.tournament} (${st.maxInnings || 4}局制)`;
+        const inningLabelText = window.scorebook.getInningLabel();
+        document.getElementById('live-tournament-title').textContent = tournamentTitleText;
+        document.getElementById('live-inning-badge').textContent = inningLabelText;
+        const subTitleEl = document.getElementById('live-tournament-title-sub');
+        if (subTitleEl) subTitleEl.textContent = tournamentTitleText;
+        const subInningEl = document.getElementById('live-inning-badge-sub');
+        if (subInningEl) subInningEl.textContent = inningLabelText;
 
         // 逐局計分板 (預設 4 局)
         const inningsCount = Math.max(st.maxInnings || 4, st.lineScore.away.length);
@@ -1194,28 +1200,47 @@ class BaseballApp {
         awayCols += `<td class="rhe-col">${st.awayScore}</td><td>${st.awayHits}</td><td>${st.awayErrors}</td>`;
         homeCols += `<td class="rhe-col">${st.homeScore}</td><td>${st.homeHits}</td><td>${st.homeErrors}</td>`;
 
-        document.getElementById('live-linescore-table').innerHTML = `
+        const linescoreHTML = `
             <thead><tr>${headCols}</tr></thead>
             <tbody>
                 <tr>${awayCols}</tr>
                 <tr>${homeCols}</tr>
             </tbody>
         `;
+        document.getElementById('live-linescore-table').innerHTML = linescoreHTML;
+        const subLinescoreEl = document.getElementById('live-linescore-table-sub');
+        if (subLinescoreEl) subLinescoreEl.innerHTML = linescoreHTML;
 
-        // B-S-O 燈號
-        for (let i = 1; i <= 3; i++) document.getElementById(`dot-b-${i}`)?.classList.toggle('active-b', st.balls >= i);
-        for (let i = 1; i <= 2; i++) document.getElementById(`dot-s-${i}`)?.classList.toggle('active-s', st.strikes >= i);
-        for (let i = 1; i <= 2; i++) document.getElementById(`dot-o-${i}`)?.classList.toggle('active-o', st.outs >= i);
+        // B-S-O 燈號（主記分板與文字轉播上方記分板同步）
+        for (let i = 1; i <= 3; i++) {
+            document.getElementById(`dot-b-${i}`)?.classList.toggle('active-b', st.balls >= i);
+            document.getElementById(`dot-b-${i}-sub`)?.classList.toggle('active-b', st.balls >= i);
+        }
+        for (let i = 1; i <= 2; i++) {
+            document.getElementById(`dot-s-${i}`)?.classList.toggle('active-s', st.strikes >= i);
+            document.getElementById(`dot-s-${i}-sub`)?.classList.toggle('active-s', st.strikes >= i);
+        }
+        for (let i = 1; i <= 2; i++) {
+            document.getElementById(`dot-o-${i}`)?.classList.toggle('active-o', st.outs >= i);
+            document.getElementById(`dot-o-${i}-sub`)?.classList.toggle('active-o', st.outs >= i);
+        }
 
         // 當前場上投手用球數監控
         const pLine = pitcher ? st.pitchingStats[pitcher.id] : null;
         const np = pLine ? pLine.np : 0;
         const warnLimit = window.store.data.settings?.pitchLimitWarning || 50;
         const maxLimit = window.store.data.settings?.pitchLimitMax || 65;
+        const pillClass = 'pitch-limit-pill ' + (np >= maxLimit ? 'danger' : (np >= warnLimit ? 'warn' : ''));
+        const pillText = `⚾ ${pTeam.emoji}${pTeam.name}本隊投手 ${pitcher ? pitcher.name : ''}：${np} 球 (好球 ${pLine ? pLine.strikes : 0})`;
         const pillEl = document.getElementById('live-pitch-count-pill');
         if (pillEl) {
-            pillEl.className = 'pitch-limit-pill ' + (np >= maxLimit ? 'danger' : (np >= warnLimit ? 'warn' : ''));
-            pillEl.textContent = `⚾ ${pTeam.emoji}${pTeam.name}本隊投手 ${pitcher ? pitcher.name : ''}：${np} 球 (好球 ${pLine ? pLine.strikes : 0})`;
+            pillEl.className = pillClass;
+            pillEl.textContent = pillText;
+        }
+        const subPillEl = document.getElementById('live-pitch-count-pill-sub');
+        if (subPillEl) {
+            subPillEl.className = pillClass;
+            subPillEl.textContent = pillText;
         }
 
         // 攻守隊伍橫幅
@@ -3078,6 +3103,132 @@ class BaseballApp {
     /* ======================================================================
        4. 歷史比賽紀錄與賽後快速補登/修改 (Games History & Quick Box Entry)
        ====================================================================== */
+    extractGameLineScore(g) {
+        const minInnings = g?.isExternal ? 6 : 4;
+        const rawAway = Array.isArray(g?.lineScore?.away) ? g.lineScore.away : [];
+        const rawHome = Array.isArray(g?.lineScore?.home) ? g.lineScore.home : [];
+        const pbp = Array.isArray(g?.playByPlay) ? g.playByPlay : [];
+
+        // 若無多局數明細但有帶比數快照的逐球轉播，自動反推各局得分
+        let pbpMaxInn = 0;
+        const pbpAway = [];
+        const pbpHome = [];
+        if (pbp.length > 0) {
+            let prevA = 0;
+            let prevH = 0;
+            pbp.forEach(item => {
+                const mInn = String(item?.inning || '').match(/^(\d+)\s*局/);
+                const mScore = String(item?.score || '').match(/^(\d+)\s*:\s*(\d+)$/);
+                if (mInn && mScore) {
+                    const innIdx = Math.max(0, Number(mInn[1]) - 1);
+                    pbpMaxInn = Math.max(pbpMaxInn, innIdx + 1);
+                    while (pbpAway.length <= innIdx) pbpAway.push(0);
+                    while (pbpHome.length <= innIdx) pbpHome.push(0);
+                    const curA = Number(mScore[1]) || 0;
+                    const curH = Number(mScore[2]) || 0;
+                    const dA = curA - prevA;
+                    const dH = curH - prevH;
+                    if (dA > 0) pbpAway[innIdx] += dA;
+                    if (dH > 0) pbpHome[innIdx] += dH;
+                    prevA = curA;
+                    prevH = curH;
+                }
+            });
+        }
+
+        if (rawAway.length <= 1 && rawHome.length <= 1 && pbpMaxInn > 1) {
+            const inningsCount = Math.max(Number(g?.innings) || minInnings, pbpMaxInn, minInnings);
+            while (pbpAway.length < inningsCount) pbpAway.push(0);
+            while (pbpHome.length < inningsCount) pbpHome.push(0);
+            return { awayArr: pbpAway, homeArr: pbpHome, inningsCount, hasPerInningData: true };
+        }
+
+        const inningsCount = Math.max(Number(g?.innings) || minInnings, rawAway.length, rawHome.length, minInnings);
+        const isLegacyTotalOnly = (pbp.length === 0 && rawAway.length <= 1 && rawHome.length <= 1 && inningsCount > 1 && !g?.hasPerInningLineScore);
+        const awayArr = [];
+        const homeArr = [];
+
+        if (isLegacyTotalOnly) {
+            for (let i = 0; i < inningsCount; i++) {
+                awayArr.push(i === 0 && rawAway.length === 1 ? (Number(rawAway[0]) || 0) : null);
+                homeArr.push(i === 0 && rawHome.length === 1 ? (Number(rawHome[0]) || 0) : null);
+            }
+            return { awayArr, homeArr, inningsCount, hasPerInningData: false };
+        }
+
+        for (let i = 0; i < inningsCount; i++) {
+            const aVal = rawAway[i];
+            const hVal = rawHome[i];
+            awayArr.push(aVal === '' || aVal === null || aVal === undefined ? null : (Number(aVal) || 0));
+            homeArr.push(hVal === '' || hVal === null || hVal === undefined ? null : (Number(hVal) || 0));
+        }
+        return { awayArr, homeArr, inningsCount, hasPerInningData: true };
+    }
+
+    buildGameScoreboardHTML(g, options = {}) {
+        if (!g) return '';
+        const { compact = false, showMeta = false } = options;
+        const awayT = window.store.getTeam(g.awayTeamId, g.opponentName);
+        const homeT = window.store.getTeam(g.homeTeamId, g.opponentName);
+        const { awayArr, homeArr, inningsCount, hasPerInningData } = this.extractGameLineScore(g);
+
+        let headCols = '<th class="team-col">對戰隊伍</th>';
+        let awayCols = `<td class="team-col" style="color:${awayT.color || '#fff'};">${awayT.emoji} ${awayT.name} (客)</td>`;
+        let homeCols = `<td class="team-col" style="color:${homeT.color || '#fff'};">${homeT.emoji} ${homeT.name} (主)</td>`;
+
+        for (let i = 0; i < inningsCount; i++) {
+            const aVal = awayArr[i];
+            const hVal = homeArr[i];
+            const aText = aVal === null ? '-' : aVal;
+            const hText = hVal === null ? '-' : hVal;
+            const aStyle = aVal !== null && aVal > 0
+                ? 'background:rgba(203,176,99,0.22);color:#fde68a;font-weight:900;'
+                : (aVal === null ? 'color:#64748b;' : '');
+            const hStyle = hVal !== null && hVal > 0
+                ? 'background:rgba(203,176,99,0.22);color:#fde68a;font-weight:900;'
+                : (hVal === null ? 'color:#64748b;' : '');
+            headCols += `<th>${i + 1}</th>`;
+            awayCols += `<td style="${aStyle}">${aText}</td>`;
+            homeCols += `<td style="${hStyle}">${hText}</td>`;
+        }
+
+        headCols += '<th class="rhe-col">R</th><th class="rhe-col">H</th><th class="rhe-col">E</th>';
+        awayCols += `<td class="rhe-col">${g.awayScore ?? 0}</td><td>${g.awayHits ?? 0}</td><td>${g.awayErrors ?? 0}</td>`;
+        homeCols += `<td class="rhe-col">${g.homeScore ?? 0}</td><td>${g.homeHits ?? 0}</td><td>${g.homeErrors ?? 0}</td>`;
+
+        const boxStyle = compact
+            ? 'padding:10px 12px;margin-bottom:12px;'
+            : 'padding:12px 14px;margin-bottom:14px;';
+        const metaHTML = showMeta
+            ? `
+                <div class="scoreboard-top-meta" style="margin-bottom:8px;">
+                    <span>📅 ${g.date || ''} ｜ ${g.tournament || ''}</span>
+                    <span class="inning-badge-live">終場計分板 (${inningsCount}局)</span>
+                </div>
+            `
+            : `
+                <div class="scoreboard-top-meta" style="margin-bottom:6px;font-size:0.76rem;">
+                    <span>📋 逐局記分板 (${inningsCount}局制)</span>
+                    <span style="color:var(--text-secondary);font-weight:700;">${hasPerInningData ? '黃底為得分局' : '僅記錄總分，點「修改/補打」可補各局'}</span>
+                </div>
+            `;
+
+        return `
+            <div class="scoreboard-box" style="${boxStyle}">
+                ${metaHTML}
+                <div class="table-scroll-wrapper">
+                    <table class="linescore-table" style="${compact ? 'font-size:0.82rem;' : ''}">
+                        <thead><tr>${headCols}</tr></thead>
+                        <tbody>
+                            <tr>${awayCols}</tr>
+                            <tr>${homeCols}</tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
     renderGamesHistoryView() {
         const container = document.getElementById('games-history-list');
         if (!container) return;
@@ -3104,6 +3255,7 @@ class BaseballApp {
             const typeTag = g.isExternal
                 ? `<span style="background:linear-gradient(135deg,#065f46,#047857);color:#a7f3d0;padding:2px 8px;border-radius:999px;font-size:0.74rem;font-weight:900;border:1px solid #34d399;">🌏 對外比賽</span>`
                 : `<span style="background:rgba(212,175,55,0.18);color:var(--jj-gold-light);padding:2px 8px;border-radius:999px;font-size:0.74rem;font-weight:900;border:1px solid rgba(212,175,55,0.4);">🏟️ 隊內三隊賽</span>`;
+            const scoreboardHTML = this.buildGameScoreboardHTML(g, { compact: true });
 
             return `
                 <div class="game-history-card" style="${outcome.isRuling ? 'border-color:#f59e0b;' : (g.isExternal ? 'border-color:rgba(52,211,153,0.55);' : '')}">
@@ -3113,7 +3265,7 @@ class BaseballApp {
                         </span>
                         <span class="game-result-badge win" style="${badgeStyle}">${winText}</span>
                     </div>
-                    <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg-primary);padding:14px 16px;border-radius:12px;margin-bottom:12px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg-primary);padding:14px 16px;border-radius:12px;margin-bottom:10px;">
                         <div>
                             <div style="font-weight:800;font-size:1.02rem;color:${awayT.color};">${awayT.emoji} ${awayT.name} (客)</div>
                             <div style="font-size:0.76rem;color:var(--text-secondary);">${g.awayHits || 0} 安打 / ${g.awayErrors || 0} 失誤</div>
@@ -3126,6 +3278,7 @@ class BaseballApp {
                             <div style="font-size:0.76rem;color:var(--text-secondary);">${g.homeHits || 0} 安打 / ${g.homeErrors || 0} 失誤</div>
                         </div>
                     </div>
+                    ${scoreboardHTML}
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
                         <button class="btn" style="flex:1;justify-content:center;" onclick="app.openGameBoxScoreModal('${g.id}')">📊 查看 Box 計分表</button>
                         <button class="btn" style="border-color:#38bdf8;color:#7dd3fc;" onclick="app.openGameBoxScoreModal('${g.id}', true)">📢 文字轉播 (${(g.playByPlay || []).length})</button>
@@ -3194,6 +3347,9 @@ class BaseballApp {
             }).join('')
             : '<div style="padding:14px;text-align:center;color:var(--text-secondary);font-size:0.84rem;">此場比賽無文字轉播紀錄（可能為賽後手動補打場次）。</div>';
 
+        const topScoreboardHTML = this.buildGameScoreboardHTML(g, { showMeta: true });
+        const pbpScoreboardHTML = this.buildGameScoreboardHTML(g, { compact: true });
+
         body.innerHTML = `
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
                 <div style="font-size:0.9rem;color:var(--text-secondary);">
@@ -3203,6 +3359,7 @@ class BaseballApp {
                     ✏️ 修改 / 補打本場選手數據
                 </button>
             </div>
+            ${topScoreboardHTML}
             <div style="margin-bottom:14px;">
                 <h4 style="color:var(--cpbl-gold-light);margin-bottom:6px;">打擊成績 Box Score</h4>
                 <div class="table-scroll-wrapper">
@@ -3233,6 +3390,7 @@ class BaseballApp {
                         <button type="button" class="btn" style="padding:4px 10px;font-size:0.76rem;border-color:#34d399;color:#6ee7b7;" onclick="app.downloadGamesPlayByPlay(['${g.id}'], 'csv')">📊 下載轉播 (.csv Excel版)</button>
                     </div>
                 </div>
+                ${pbpScoreboardHTML}
                 <div style="max-height:240px;overflow-y:auto;background:rgba(6,21,39,0.75);border-radius:8px;border:1px solid var(--border-color);">
                     ${pbpRowsHTML}
                 </div>
@@ -3336,6 +3494,32 @@ class BaseballApp {
             }
         }
 
+        // 初始化逐局記分板草稿狀態
+        if (editGame) {
+            const lsInfo = this.extractGameLineScore(editGame);
+            const innCnt = Math.max(lsInfo.inningsCount, isExt ? 6 : 4);
+            this._qbLineScore = {
+                inningsCount: innCnt,
+                away: lsInfo.hasPerInningData
+                    ? Array.from({ length: innCnt }, (_, i) => (lsInfo.awayArr[i] === null || lsInfo.awayArr[i] === undefined ? '' : String(lsInfo.awayArr[i])))
+                    : Array(innCnt).fill(''),
+                home: lsInfo.hasPerInningData
+                    ? Array.from({ length: innCnt }, (_, i) => (lsInfo.homeArr[i] === null || lsInfo.homeArr[i] === undefined ? '' : String(lsInfo.homeArr[i])))
+                    : Array(innCnt).fill(''),
+                awayErrors: editGame.awayErrors || 0,
+                homeErrors: editGame.homeErrors || 0
+            };
+        } else {
+            const defInn = isExt ? 6 : 4;
+            this._qbLineScore = {
+                inningsCount: defInn,
+                away: Array(defInn).fill(''),
+                home: Array(defInn).fill(''),
+                awayErrors: 0,
+                homeErrors: 0
+            };
+        }
+
         const modal = document.getElementById('runner-action-modal');
         const title = document.getElementById('runner-modal-title');
         const body = document.getElementById('runner-modal-body');
@@ -3375,11 +3559,11 @@ class BaseballApp {
             <div id="qb-ext-header-fields" class="form-grid" style="display:${isExt ? 'grid' : 'none'};margin-bottom:12px;padding:12px;background:rgba(6,78,59,0.25);border:1.5px solid #34d399;border-radius:12px;">
                 <div class="form-group">
                     <label style="color:#6ee7b7;font-weight:900;">⚔️ 外校對手球隊名稱</label>
-                    <input type="text" id="qb-opp-name" class="form-control" value="${initOppName}" placeholder="例如：福林國小、東園國小、日本交流隊">
+                    <input type="text" id="qb-opp-name" class="form-control" value="${initOppName}" placeholder="例如：福林國小、東園國小、日本交流隊" oninput="app.syncQuickBoxLinescoreToDraft();app.renderQuickBoxLinescoreEditor()">
                 </div>
                 <div class="form-group">
                     <label style="color:#6ee7b7;font-weight:900;">🧭 中正國小攻守位置</label>
-                    <select id="qb-jj-side" class="form-control">
+                    <select id="qb-jj-side" class="form-control" onchange="app.syncQuickBoxLinescoreToDraft();app.renderQuickBoxLinescoreEditor();app.onQuickBoxInningChange()">
                         <option value="away" ${initJjSide === 'away' ? 'selected' : ''}>🚩 中正國小先攻 (客隊 Away)</option>
                         <option value="home" ${initJjSide === 'home' ? 'selected' : ''}>🏠 中正國小後攻 (主隊 Home)</option>
                     </select>
@@ -3399,7 +3583,7 @@ class BaseballApp {
                 <div class="form-group">
                     <label>🚩 先攻隊伍 (客隊) & 得分</label>
                     <div style="display:flex;gap:6px;">
-                        <select id="qb-away-team" class="form-control" onchange="app.syncQuickBoxDomToDraft();app.renderQuickBoxPlayers()">
+                        <select id="qb-away-team" class="form-control" onchange="app.syncQuickBoxDomToDraft();app.syncQuickBoxLinescoreToDraft();app.renderQuickBoxLinescoreEditor();app.renderQuickBoxPlayers()">
                             ${teams.map(t => `<option value="${t.id}" ${t.id === initAwayTeam ? 'selected' : ''}>${t.emoji} ${t.name}</option>`).join('')}
                         </select>
                         <input type="number" id="qb-away-score" class="form-control" value="${initAwayScore}" min="0" style="width:78px;">
@@ -3408,13 +3592,16 @@ class BaseballApp {
                 <div class="form-group">
                     <label>🏠 後攻隊伍 (主隊) & 得分</label>
                     <div style="display:flex;gap:6px;">
-                        <select id="qb-home-team" class="form-control" onchange="app.syncQuickBoxDomToDraft();app.renderQuickBoxPlayers()">
+                        <select id="qb-home-team" class="form-control" onchange="app.syncQuickBoxDomToDraft();app.syncQuickBoxLinescoreToDraft();app.renderQuickBoxLinescoreEditor();app.renderQuickBoxPlayers()">
                             ${teams.map(t => `<option value="${t.id}" ${t.id === initHomeTeam ? 'selected' : ''}>${t.emoji} ${t.name}</option>`).join('')}
                         </select>
                         <input type="number" id="qb-home-score" class="form-control" value="${initHomeScore}" min="0" style="width:78px;">
                     </div>
                 </div>
             </div>
+
+            <!-- B2. 逐局記分板明細編輯區 -->
+            <div id="qb-linescore-editor" style="margin-bottom:12px;padding:10px 12px;background:rgba(6,21,39,0.85);border:1.5px solid rgba(203,176,99,0.55);border-radius:10px;"></div>
 
             <!-- C. 紀錄組裁定勝負設定 (如對手棄賽／裁定勝負) -->
             <div class="form-grid" style="margin-bottom:12px;padding:10px 12px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,191,36,0.4);border-radius:10px;">
@@ -3469,12 +3656,122 @@ class BaseballApp {
                 </div>
             </div>
         `;
+        this.renderQuickBoxLinescoreEditor();
         this.renderQuickBoxPlayers();
         modal.classList.add('open');
     }
 
+    syncQuickBoxLinescoreToDraft() {
+        if (!this._qbLineScore) return;
+        const awayInputs = document.querySelectorAll('.qb-line-away');
+        const homeInputs = document.querySelectorAll('.qb-line-home');
+        if (awayInputs.length > 0) {
+            this._qbLineScore.away = Array.from(awayInputs).map(el => el.value === '' ? '' : String(Math.max(0, Number(el.value) || 0)));
+            this._qbLineScore.inningsCount = this._qbLineScore.away.length;
+        }
+        if (homeInputs.length > 0) {
+            this._qbLineScore.home = Array.from(homeInputs).map(el => el.value === '' ? '' : String(Math.max(0, Number(el.value) || 0)));
+        }
+        const aeEl = document.getElementById('qb-away-errors');
+        const heEl = document.getElementById('qb-home-errors');
+        if (aeEl) this._qbLineScore.awayErrors = Math.max(0, Number(aeEl.value) || 0);
+        if (heEl) this._qbLineScore.homeErrors = Math.max(0, Number(heEl.value) || 0);
+    }
+
+    renderQuickBoxLinescoreEditor() {
+        const container = document.getElementById('qb-linescore-editor');
+        if (!container || !this._qbLineScore) return;
+
+        const isExt = this._qbGameType === 'external';
+        let awayLabel = '先攻 (客)';
+        let homeLabel = '後攻 (主)';
+        if (isExt) {
+            const oppName = (document.getElementById('qb-opp-name')?.value || '外校對手').trim() || '外校對手';
+            const jjSide = document.getElementById('qb-jj-side')?.value || 'away';
+            awayLabel = jjSide === 'away' ? '🦁 中正國小 (先攻)' : `⚔️ ${oppName} (先攻)`;
+            homeLabel = jjSide === 'away' ? `⚔️ ${oppName} (後攻)` : '🦁 中正國小 (後攻)';
+        } else {
+            const awayId = document.getElementById('qb-away-team')?.value || 't1';
+            const homeId = document.getElementById('qb-home-team')?.value || 't2';
+            const awayT = window.store.getTeam(awayId);
+            const homeT = window.store.getTeam(homeId);
+            awayLabel = `${awayT.emoji} ${awayT.name} (先攻)`;
+            homeLabel = `${homeT.emoji} ${homeT.name} (後攻)`;
+        }
+
+        const n = Math.max(this._qbLineScore.inningsCount || (isExt ? 6 : 4), this._qbLineScore.away.length, this._qbLineScore.home.length);
+        while (this._qbLineScore.away.length < n) this._qbLineScore.away.push('');
+        while (this._qbLineScore.home.length < n) this._qbLineScore.home.push('');
+
+        let headCols = '<th class="team-col">逐局得分編輯</th>';
+        let awayCols = `<td class="team-col">${awayLabel}</td>`;
+        let homeCols = `<td class="team-col">${homeLabel}</td>`;
+
+        for (let i = 0; i < n; i++) {
+            headCols += `<th>${i + 1}局</th>`;
+            awayCols += `<td><input type="number" min="0" class="form-control qb-line-away" value="${this._qbLineScore.away[i]}" placeholder="-" style="width:44px;padding:3px 4px;text-align:center;font-weight:800;" oninput="app.onQuickBoxInningChange()"></td>`;
+            homeCols += `<td><input type="number" min="0" class="form-control qb-line-home" value="${this._qbLineScore.home[i]}" placeholder="-" style="width:44px;padding:3px 4px;text-align:center;font-weight:800;" oninput="app.onQuickBoxInningChange()"></td>`;
+        }
+        headCols += '<th class="rhe-col">失誤 E</th>';
+        awayCols += `<td><input type="number" min="0" id="qb-away-errors" class="form-control" value="${this._qbLineScore.awayErrors || 0}" style="width:48px;padding:3px 4px;text-align:center;"></td>`;
+        homeCols += `<td><input type="number" min="0" id="qb-home-errors" class="form-control" value="${this._qbLineScore.homeErrors || 0}" style="width:48px;padding:3px 4px;text-align:center;"></td>`;
+
+        container.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+                <span style="font-size:0.82rem;font-weight:800;color:var(--jj-gold-light);">📋 逐局記分板明細（填入各局得分將自動加總至總得分；未填可只填上方總分）</span>
+                <button type="button" class="btn" style="padding:3px 9px;font-size:0.74rem;border-color:var(--jj-gold);color:var(--jj-gold-light);" onclick="app.addQuickBoxExtraInning()">➕ 新增延長局</button>
+            </div>
+            <div class="table-scroll-wrapper">
+                <table class="linescore-table" style="font-size:0.82rem;">
+                    <thead><tr>${headCols}</tr></thead>
+                    <tbody>
+                        <tr>${awayCols}</tr>
+                        <tr>${homeCols}</tr>
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    onQuickBoxInningChange() {
+        this.syncQuickBoxLinescoreToDraft();
+        if (!this._qbLineScore) return;
+        const hasAwayVal = this._qbLineScore.away.some(v => v !== '');
+        const hasHomeVal = this._qbLineScore.home.some(v => v !== '');
+        const awaySum = this._qbLineScore.away.reduce((acc, v) => acc + (v === '' ? 0 : Math.max(0, Number(v) || 0)), 0);
+        const homeSum = this._qbLineScore.home.reduce((acc, v) => acc + (v === '' ? 0 : Math.max(0, Number(v) || 0)), 0);
+
+        if (this._qbGameType === 'external') {
+            const jjSide = document.getElementById('qb-jj-side')?.value || 'away';
+            const jjInput = document.getElementById('qb-jj-score');
+            const oppInput = document.getElementById('qb-opp-score');
+            if (jjSide === 'away') {
+                if (hasAwayVal && jjInput) jjInput.value = awaySum;
+                if (hasHomeVal && oppInput) oppInput.value = homeSum;
+            } else {
+                if (hasHomeVal && jjInput) jjInput.value = homeSum;
+                if (hasAwayVal && oppInput) oppInput.value = awaySum;
+            }
+        } else {
+            const awayScoreInput = document.getElementById('qb-away-score');
+            const homeScoreInput = document.getElementById('qb-home-score');
+            if (hasAwayVal && awayScoreInput) awayScoreInput.value = awaySum;
+            if (hasHomeVal && homeScoreInput) homeScoreInput.value = homeSum;
+        }
+    }
+
+    addQuickBoxExtraInning() {
+        this.syncQuickBoxLinescoreToDraft();
+        if (!this._qbLineScore) return;
+        this._qbLineScore.away.push('');
+        this._qbLineScore.home.push('');
+        this._qbLineScore.inningsCount = this._qbLineScore.away.length;
+        this.renderQuickBoxLinescoreEditor();
+    }
+
     setQuickBoxGameType(type) {
         this.syncQuickBoxDomToDraft();
+        this.syncQuickBoxLinescoreToDraft();
         this._qbGameType = type === 'external' ? 'external' : 'intra';
         const isExt = this._qbGameType === 'external';
 
@@ -3490,6 +3787,16 @@ class BaseballApp {
         if (tourInput && !this._qbEditGameId) {
             tourInput.value = isExt ? '對外友誼賽 / 盃賽' : '隊內三隊爭霸賽';
         }
+        if (!this._qbEditGameId && this._qbLineScore) {
+            const hasAny = this._qbLineScore.away.some(v => v !== '') || this._qbLineScore.home.some(v => v !== '');
+            if (!hasAny) {
+                const defInn = isExt ? 6 : 4;
+                this._qbLineScore.inningsCount = defInn;
+                this._qbLineScore.away = Array(defInn).fill('');
+                this._qbLineScore.home = Array(defInn).fill('');
+            }
+        }
+        this.renderQuickBoxLinescoreEditor();
         this.renderQuickBoxPlayers();
     }
 
@@ -3622,6 +3929,7 @@ class BaseballApp {
 
     saveQuickBoxEntry() {
         this.syncQuickBoxDomToDraft();
+        this.syncQuickBoxLinescoreToDraft();
         const isExt = this._qbGameType === 'external';
         const date = document.getElementById('qb-date')?.value || new Date().toISOString().slice(0, 10);
         const tournament = document.getElementById('qb-tournament')?.value.trim() || (isExt ? '對外友誼賽 / 盃賽' : '隊內三隊爭霸賽');
@@ -3738,6 +4046,26 @@ class BaseballApp {
         const resultOverride = (resultOverrideRaw === 'away' || resultOverrideRaw === 'home' || resultOverrideRaw === 'tie') ? resultOverrideRaw : '';
         const rulingNote = resultOverride ? (document.getElementById('qb-ruling-note')?.value || '').trim() : '';
 
+        const rawAwayLS = this._qbLineScore?.away || [];
+        const rawHomeLS = this._qbLineScore?.home || [];
+        const hasAnyInningInput = rawAwayLS.some(v => v !== '') || rawHomeLS.some(v => v !== '');
+        let finalLineScore;
+        let finalInnings;
+        let hasPerInningLineScore = false;
+
+        if (hasAnyInningInput) {
+            finalLineScore = {
+                away: rawAwayLS.map(v => v === '' ? 0 : Math.max(0, Number(v) || 0)),
+                home: rawHomeLS.map(v => v === '' ? 0 : Math.max(0, Number(v) || 0))
+            };
+            finalInnings = Math.max(finalLineScore.away.length, finalLineScore.home.length, isExt ? 6 : 4);
+            hasPerInningLineScore = true;
+        } else {
+            finalLineScore = { away: [awayScore], home: [homeScore] };
+            finalInnings = Math.max(rawAwayLS.length || 0, prevGame?.innings || (isExt ? 6 : 4));
+            hasPerInningLineScore = false;
+        }
+
         const gameRecord = {
             id: this._qbEditGameId || ('g_' + Date.now()),
             date,
@@ -3752,10 +4080,11 @@ class BaseballApp {
             rulingNote,
             awayHits,
             homeHits,
-            awayErrors: prevGame ? (prevGame.awayErrors || 0) : 0,
-            homeErrors: prevGame ? (prevGame.homeErrors || 0) : 0,
-            innings: prevGame ? (prevGame.innings || (isExt ? 6 : 4)) : (isExt ? 6 : 4),
-            lineScore: (prevGame && prevGame.lineScore) ? prevGame.lineScore : { away: [awayScore], home: [homeScore] },
+            awayErrors: this._qbLineScore ? (Number(this._qbLineScore.awayErrors) || 0) : (prevGame ? (prevGame.awayErrors || 0) : 0),
+            homeErrors: this._qbLineScore ? (Number(this._qbLineScore.homeErrors) || 0) : (prevGame ? (prevGame.homeErrors || 0) : 0),
+            innings: finalInnings,
+            hasPerInningLineScore,
+            lineScore: finalLineScore,
             battingStats,
             pitchingStats,
             playByPlay: []
@@ -4455,6 +4784,16 @@ ${makeSheet('逐場文字轉播紀錄', [ds.playByPlayTable])}
             lines.push(`============================================================`);
             lines.push(`【第 ${idx + 1} 場】${g.isExternal ? '🌏 對外比賽' : '🏟️ 隊內三隊賽'} ｜ ${g.date} ｜ ${g.tournament}`);
             lines.push(`對戰：${awayT.name} (客) ${g.awayScore} : ${g.homeScore} ${homeT.name} (主) ${rulingText}`);
+
+            const { awayArr, homeArr, inningsCount, hasPerInningData } = this.extractGameLineScore(g);
+            if (hasPerInningData || awayArr.length > 0) {
+                const innHeader = Array.from({ length: inningsCount }, (_, i) => String(i + 1).padStart(2, ' ')).join(' ');
+                const awayStr = awayArr.map(v => String(v === null ? '-' : v).padStart(2, ' ')).join(' ');
+                const homeStr = homeArr.map(v => String(v === null ? '-' : v).padStart(2, ' ')).join(' ');
+                lines.push(`逐局記分板：[局數 ${innHeader} |  R  H  E]`);
+                lines.push(`  先攻 ${awayT.name}：${awayStr} | ${String(g.awayScore ?? 0).padStart(2, ' ')} ${String(g.awayHits ?? 0).padStart(2, ' ')} ${String(g.awayErrors ?? 0).padStart(2, ' ')}`);
+                lines.push(`  後攻 ${homeT.name}：${homeStr} | ${String(g.homeScore ?? 0).padStart(2, ' ')} ${String(g.homeHits ?? 0).padStart(2, ' ')} ${String(g.homeErrors ?? 0).padStart(2, ' ')}`);
+            }
 
             const rbiPlayers = (g.battingStats || [])
                 .filter(b => b && b.playerId !== 'opp_batter' && ((b.rbi || 0) > 0 || (b.r || 0) > 0 || (b.h || 0) > 0))

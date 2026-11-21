@@ -764,14 +764,18 @@ html, body {
    ========================================================================== */
 .scorebook-layout {
     display: grid;
-    grid-template-columns: 1.05fr 1.25fr;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.25fr);
     gap: 18px;
     align-items: start;
 }
 
+.scorebook-layout > * {
+    min-width: 0;
+}
+
 @media (max-width: 960px) {
     .scorebook-layout {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
     }
 }
 
@@ -1534,8 +1538,14 @@ html, body {
         order: 3;
     }
 
-    .live-scorebook-grid .play-log-card {
+    .live-scorebook-grid .sub-scoreboard-box {
         order: 4;
+        margin-top: 0 !important;
+        width: 100%;
+    }
+
+    .live-scorebook-grid .play-log-card {
+        order: 5;
         margin-top: 0 !important;
     }
 }
