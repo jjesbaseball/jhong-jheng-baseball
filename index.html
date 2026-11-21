@@ -388,8 +388,9 @@
                         <div id="live-matchup-info" class="matchup-bar"></div>
 
                         <div class="action-pad-card play-log-card" style="margin-top:14px;">
-                            <div class="pad-group-title">
+                            <div class="pad-group-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
                                 <span>📢 即時逐球/打席文字轉播 (Play-by-Play)</span>
+                                <button type="button" class="btn" style="padding:3px 9px;font-size:0.74rem;" onclick="app.downloadLivePlayByPlay()">📥 下載目前轉播</button>
                             </div>
                             <div id="live-play-log" class="play-log-list"></div>
                         </div>
@@ -481,13 +482,20 @@
                             <button class="touch-btn btn-walk" style="grid-column: 1 / -1;border-color:#38bdf8;" onclick="app.handlePlayBtn('K_SAFE')">
                                 ⚡ 不死三振上壘 (Uncaught 3rd Strike) — 記 1 三振、打者上一壘、不計出局數
                             </button>
+                            <button class="touch-btn btn-walk" style="grid-column: span 2;" onclick="app.handlePlayBtn('FC')">
+                                🔀 野手選擇上壘 (FC)<small>打者上一壘 (打數+1)</small>
+                            </button>
+                            <button class="touch-btn btn-out" style="border-color:#f97316;" onclick="app.handleFieldingErrorBtn()">
+                                💥 守備失誤<small>守備方失誤次數 +1 E</small>
+                            </button>
                             <button class="touch-btn btn-walk" style="grid-column: 1 / -1;" onclick="app.handlePlayBtn('ROE')">
-                                ⚠️ 守備失誤上壘 (Error / ROE) — 記守備方失誤 1 次、非自責分
+                                ⚠️ 守備失誤上壘 (Error / ROE) — 記打者上壘 ＋ 守備方失誤 1 次
                             </button>
                         </div>
 
                         <div class="utility-btn-row">
                             <button class="btn" onclick="app.openChangePitcherModal()">🔄 更換投手</button>
+                            <button class="btn" style="border-color:#38bdf8;color:#7dd3fc;font-weight:800;" onclick="app.openPinchSubModal('PH')">🔄 代打 / 代跑</button>
                             <button class="btn" onclick="app.promptChangeBatter()">🔢 排序打序 / 切換棒次</button>
                             <button class="btn" style="margin-left:auto;background:linear-gradient(135deg,#f59e0b,#d97706);color:#061527;font-weight:900;border-color:#fde68a;" onclick="app.openFinalizeGameModal('ruling')">
                                 ⚖️ 直接結束比賽 (勝負由紀錄組決定)
@@ -610,6 +618,7 @@
             <div class="section-toolbar">
                 <h2 class="section-title" id="games-history-section-title">歷史對戰計分本與成績查詢（隊內三隊賽 ＆ 對外賽事）</h2>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                    <button class="btn" style="border-color:#38bdf8;color:#7dd3fc;font-weight:800;" onclick="app.openPlayByPlayDownloadModal()">📢 挑選場次下載文字轉播</button>
                     <button class="btn" style="background:linear-gradient(135deg,#0f3d3e,#0b5345);color:#fff;border-color:#34d399;font-weight:900;" onclick="app.openQuickBoxEntryModal(null, 'external')">🌏 補打對外比賽紀錄</button>
                     <button class="btn" onclick="app.openQuickBoxEntryModal(null, 'intra')">🏟️ 補打隊內比賽紀錄</button>
                     <button class="btn btn-primary" onclick="app.switchTab('scorebook')">⚾ 前往實戰計分本</button>
@@ -683,7 +692,10 @@
                             📊 下載 Excel 完整數據總表 (.csv｜含隊內＋對外投打＆逐場明細)
                         </button>
                         <button class="btn" style="border-color:var(--jj-gold);color:var(--jj-gold-light);font-weight:800;" onclick="app.exportExcelWorkbook()">
-                            📑 下載 Excel 多工作表分頁總檔 (.xls｜6大工作表分頁)
+                            📑 下載 Excel 多工作表分頁總檔 (.xls｜7大工作表分頁)
+                        </button>
+                        <button class="btn" style="border-color:#38bdf8;color:#7dd3fc;font-weight:800;" onclick="app.openPlayByPlayDownloadModal()">
+                            📢 挑選場次下載文字轉播 (.txt/.csv)
                         </button>
                     </div>
 

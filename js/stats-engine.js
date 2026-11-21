@@ -290,6 +290,7 @@ const StatsEngine = {
                 bats: p.bats,
                 g: 0, pa: 0, ab: 0, h: 0, b1: 0, b2: 0, b3: 0, hr: 0, tb: 0,
                 rbi: 0, r: 0, bb: 0, hbp: 0, so: 0, sac: 0, sf: 0, sb: 0, cs: 0, roe: 0,
+                ccs: 0, fc: 0,
                 splitsByTeam: {} // { [teamId]: { g, pa, ab, h, hr, rbi, sb } }
             };
         });
@@ -335,6 +336,8 @@ const StatsEngine = {
                 st.sb += (line.sb || 0);
                 st.cs += (line.cs || 0);
                 st.roe += (line.roe || 0);
+                st.ccs += (line.ccs || 0);
+                st.fc += (line.fc || 0);
             });
         });
 
@@ -382,7 +385,7 @@ const StatsEngine = {
                 throws: p.throws,
                 g: 0, gs: 0, w: 0, l: 0, sv: 0, hld: 0,
                 outs: 0, np: 0, strikes: 0, bf: 0,
-                h: 0, hr: 0, bb: 0, hbp: 0, so: 0, wp: 0, r: 0, er: 0,
+                h: 0, hr: 0, bb: 0, hbp: 0, so: 0, wp: 0, pk: 0, r: 0, er: 0,
                 splitsByTeam: {}
             };
         });
@@ -423,6 +426,7 @@ const StatsEngine = {
                 st.hbp += (line.hbp || 0);
                 st.so += (line.so || 0);
                 st.wp += (line.wp || 0);
+                st.pk += (line.pk || 0);
                 st.r += (line.r || 0);
                 st.er += (line.er || 0);
             });

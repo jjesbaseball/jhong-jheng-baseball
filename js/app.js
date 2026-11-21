@@ -500,6 +500,7 @@ class BaseballApp {
                 { k: 'sb', label: '盜壘SB' },
                 { k: 'bb', label: '四壞BB' },
                 { k: 'so', label: '三振SO' },
+                { k: 'ccs', label: '捕手阻殺CCS' },
                 { k: 'obp', label: '上壘率OBP' },
                 { k: 'slg', label: '長打率SLG' },
                 { k: 'ops', label: 'OPS' }
@@ -539,6 +540,7 @@ class BaseballApp {
                         <td class="${key === 'sb' ? 'highlight-col' : ''}">${r.sb}</td>
                         <td>${r.bb}</td>
                         <td>${r.so}</td>
+                        <td class="${key === 'ccs' ? 'highlight-col' : ''}">${r.ccs || 0}</td>
                         <td>${StatsEngine.formatRate(r.obp)}</td>
                         <td>${StatsEngine.formatRate(r.slg)}</td>
                         <td class="${key === 'ops' ? 'highlight-col' : ''}"><strong>${StatsEngine.formatRate(r.ops)}</strong></td>
@@ -582,6 +584,7 @@ class BaseballApp {
                 { k: 'so', label: '奪三振SO' },
                 { k: 'kRate', label: '奪三振率K/9' },
                 { k: 'wp', label: '暴投WP' },
+                { k: 'pk', label: '牽制PK' },
                 { k: 'r', label: '失分R' },
                 { k: 'er', label: '自責分ER' }
             ];
@@ -622,6 +625,7 @@ class BaseballApp {
                         <td class="${key === 'so' ? 'highlight-col' : ''}"><strong>${r.so}</strong></td>
                         <td class="${key === 'kRate' ? 'highlight-col' : ''}">${StatsEngine.formatERA(r.kRate)}</td>
                         <td class="${key === 'wp' ? 'highlight-col' : ''}">${r.wp || 0}</td>
+                        <td class="${key === 'pk' ? 'highlight-col' : ''}">${r.pk || 0}</td>
                         <td>${r.r}</td>
                         <td>${r.er}</td>
                     </tr>
@@ -1232,9 +1236,12 @@ class BaseballApp {
             const pitcherRoleLabel = st.sameTeamPitcher !== false ? '⚾ 同隊投手（自己隊伍投球）' : '⚾ 對手場上投手';
             matchupEl.innerHTML = `
                 <div style="flex:1;min-width:200px;background:rgba(203,176,99,0.1);padding:10px 12px;border-radius:10px;border-left:4px solid ${battingTeam.color};">
-                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
                         <span style="font-size:0.76rem;color:var(--text-secondary);">🏏 目前打擊：${battingTeam.emoji}${battingTeam.name}（第 ${orderNo} 棒）</span>
-                        <button class="btn" style="padding:2px 8px;font-size:0.74rem;" onclick="app.promptChangeBatter()">🔢 排序打序/換棒次</button>
+                        <div style="display:flex;gap:4px;">
+                            <button class="btn" style="padding:2px 8px;font-size:0.74rem;border-color:#38bdf8;color:#7dd3fc;" onclick="app.openPinchSubModal('PH')">🔄 代打</button>
+                            <button class="btn" style="padding:2px 8px;font-size:0.74rem;" onclick="app.promptChangeBatter()">🔢 打序</button>
+                        </div>
                     </div>
                     <div style="font-size:1.1rem;font-weight:900;color:var(--cpbl-gold-light);margin-top:3px;">
                         #${batter ? batter.number : ''} ${batter ? batter.name : ''}
@@ -1248,7 +1255,7 @@ class BaseballApp {
                     </div>
                     <div style="font-size:1.1rem;font-weight:900;color:#93c5fd;margin-top:3px;">
                         #${pitcher ? pitcher.number : ''} ${pitcher ? pitcher.name : ''}
-                        <small style="color:#cbd5e1;font-weight:600;">（${ipStr}局 / ${np}球 / ${pLine ? pLine.so : 0}K / ${pLine ? (pLine.wp || 0) : 0}暴投）</small>
+                        <small style="color:#cbd5e1;font-weight:600;">（${ipStr}局 / ${np}球 / ${pLine ? pLine.so : 0}K / ${pLine ? (pLine.wp || 0) : 0}暴投 / 失${pLine ? pLine.r : 0}自責${pLine ? pLine.er : 0}）</small>
                     </div>
                 </div>
             `;
@@ -1265,14 +1272,18 @@ class BaseballApp {
             }
         });
 
-        // 更新文字轉播（僅顯示選手名字＋好壞球或結果）
+        // 更新文字轉播（顯示局數、比數/出局數/壘包快照與事件結果）
         const logContainer = document.getElementById('live-play-log');
         if (logContainer) {
-            logContainer.innerHTML = (st.playByPlay || []).map(item => `
-                <div class="play-log-item">
-                    <span>${item.text}</span>
-                </div>
-            `).join('');
+            logContainer.innerHTML = (st.playByPlay || []).map(item => {
+                const metaParts = [item.inning, item.score ? `比數 ${item.score}` : '', item.outs, item.bases].filter(Boolean);
+                return `
+                    <div class="play-log-item" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+                        <span>${item.text || ''}</span>
+                        ${metaParts.length > 0 ? `<small style="color:var(--text-secondary);font-size:0.72rem;white-space:nowrap;">${metaParts.join(' ｜ ')}</small>` : ''}
+                    </div>
+                `;
+            }).join('') || '<div class="play-log-item" style="color:var(--text-secondary);">尚無文字轉播紀錄</div>';
         }
     }
 
@@ -1643,13 +1654,21 @@ class BaseballApp {
         }
     }
 
+    handleFieldingErrorBtn() {
+        window.scorebook.recordFieldingError();
+        const latestLog = window.scorebook.state?.playByPlay?.[0]?.text;
+        if (latestLog) this.speakActionText(latestLog);
+        this.renderScorebookView();
+    }
+
     onBaseClicked(baseKey) {
         const st = window.scorebook.state;
         if (!st) return;
         this.selectedBaseKey = baseKey;
         const runner = st.bases[baseKey];
         const baseTitleMap = { first: '一壘', second: '二壘', third: '三壘' };
-        const { battingTeam } = window.scorebook.getActiveTeams();
+        const { battingTeam, fieldingTeam } = window.scorebook.getActiveTeams();
+        const { catcher } = window.scorebook.getCurrentMatchup();
 
         const modal = document.getElementById('runner-action-modal');
         const title = document.getElementById('runner-modal-title');
@@ -1659,28 +1678,76 @@ class BaseballApp {
         title.textContent = `🏃 ${baseTitleMap[baseKey]}跑者操作`;
 
         if (runner) {
+            const fieldingPlayers = window.store.getPlayersByTeam(fieldingTeam.id) || [];
+            const sortedCatchers = [...fieldingPlayers].sort((a, b) => {
+                const aC = /C|捕/.test(a.pos || '') ? 1 : 0;
+                const bC = /C|捕/.test(b.pos || '') ? 1 : 0;
+                return bC - aC;
+            });
+            const activeCatcherId = (st.half === 'top' ? st.homeCatcherId : st.awayCatcherId) || (catcher ? catcher.id : '');
+
+            const lastBatterObj = st.lastBatterId ? window.store.getPlayer(st.lastBatterId) : null;
+            const lastBatterLabel = st.lastBatterId
+                ? `前打席 #${lastBatterObj ? lastBatterObj.number : ''} ${lastBatterObj ? lastBatterObj.name : st.lastBatterId} +1 RBI`
+                : '無前打席紀錄 (將不另記 RBI)';
+
+            const isAutoUnearned = Boolean(runner.isUnearned || st.unearnedInning);
+            const unearnedHintBadge = st.unearnedInning
+                ? '<span class="season-badge" style="background:rgba(245,158,11,0.22);border-color:#f59e0b;color:#fde68a;margin-left:6px;">2出局失誤後・非自責局</span>'
+                : (runner.isUnearned ? '<span class="season-badge" style="background:rgba(245,158,11,0.22);border-color:#f59e0b;color:#fde68a;margin-left:6px;">非自責跑者</span>' : '');
+
             body.innerHTML = `
-                <div style="margin-bottom:14px;padding:10px;background:var(--bg-primary);border-radius:8px;">
-                    目前壘上跑者：<strong style="color:var(--cpbl-gold-light);font-size:1.05rem;">#${runner.number || ''} ${runner.name}</strong>
+                <div style="margin-bottom:10px;padding:10px 12px;background:var(--bg-primary);border-radius:8px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+                    <div>
+                        目前壘上跑者：<strong style="color:var(--cpbl-gold-light);font-size:1.05rem;">#${runner.number || ''} ${runner.name}</strong>${unearnedHintBadge}
+                    </div>
+                    <button type="button" class="btn" style="padding:4px 10px;font-size:0.78rem;border-color:#38bdf8;color:#7dd3fc;font-weight:800;" onclick="app.openPinchSubModal('PR', '${baseKey}')">
+                        👟 更換代跑
+                    </button>
                 </div>
+
+                <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px 10px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.45);border-radius:8px;cursor:pointer;font-size:0.82rem;color:#fde68a;font-weight:800;">
+                    <input type="checkbox" id="runner-modal-unearned-cb" style="width:18px;height:18px;accent-color:#f59e0b;" ${isAutoUnearned ? 'checked' : ''}>
+                    <span>☑️ 此跑者本次得分／推進列為「非自責分」（僅計失分 R，不計投手自責分 ER）</span>
+                </label>
+
+                <div style="margin-bottom:12px;padding:8px 10px;background:rgba(15,23,42,0.55);border-radius:8px;border:1px solid var(--border-color);display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                    <span style="font-size:0.78rem;color:var(--text-secondary);">🧤 守備方捕手（盜壘失敗 CS 將自動計該捕手阻殺 +1）：</span>
+                    <select id="runner-modal-catcher-select" class="form-control" style="width:auto;min-width:170px;padding:4px 8px;font-size:0.8rem;" onchange="window.scorebook.changeCatcher(this.value, true)">
+                        ${sortedCatchers.length > 0
+                            ? sortedCatchers.map(p => `<option value="${p.id}" ${p.id === activeCatcherId ? 'selected' : ''}>#${p.number} ${p.name} (${p.pos || '選手'})</option>`).join('')
+                            : `<option value="${activeCatcherId || ''}">${catcher ? `#${catcher.number} ${catcher.name}` : '對手捕手'}</option>`
+                        }
+                    </select>
+                </div>
+
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                    <button class="touch-btn btn-hit" onclick="app.execRunnerAction('ADVANCE')">
+                        ➡️ 跑者進壘<small>前進一個壘包</small>
+                    </button>
                     <button class="touch-btn btn-hit" onclick="app.execRunnerAction('SB')">
                         🏃 盜壘成功 (SB)<small>進一壘並記 1 次盜壘</small>
                     </button>
                     <button class="touch-btn btn-out" onclick="app.execRunnerAction('CS')">
-                        🚫 盜壘失敗 (CS)<small>抓盜壘出局 (+1 Out)</small>
+                        🚫 盜壘失敗 (CS)<small>+1 Out ＆ 捕手記 1 次阻殺</small>
                     </button>
-                    <button class="touch-btn btn-out" onclick="app.execRunnerAction('TAG_OUT')">
-                        🛑 觸殺出局<small>牽制/夾殺/觸殺 (+1 Out)</small>
+                    <button class="touch-btn btn-out" onclick="app.execRunnerAction('PICKOFF')">
+                        🎯 牽制出局<small>+1 Out ＆ 投手牽制成功 +1</small>
+                    </button>
+                    <button class="touch-btn btn-out" onclick="app.execRunnerAction('RUNNER_OUT')">
+                        🚫 跑者出局<small>出局數 +1 (封殺/觸殺)</small>
                     </button>
                     <button class="touch-btn btn-out" onclick="app.execRunnerAction('RUNNER_ERROR')">
-                        💥 跑壘失誤<small>跑壘判斷失誤出局 (+1 Out)</small>
+                        💥 跑壘失誤<small>跑壘失誤出局 (+1 Out)</small>
                     </button>
-                    <button class="touch-btn btn-walk" onclick="app.execRunnerAction('WP')">
-                        ⚡ 暴投/捕逸推進<small>推進一壘 (投手+1暴投)</small>
+                    <button class="touch-btn btn-walk" style="grid-column: 1 / -1;" onclick="app.execRunnerAction('WP')">
+                        ⚡ 暴投/捕逸推進<small>前進一壘 (投手 +1 暴投)</small>
                     </button>
-                    <button class="touch-btn btn-hr" onclick="app.execRunnerAction('SCORE')">
-                        🏠 直接跑回得分<small>本壘得分 (+1 R)</small>
+                    <button class="touch-btn btn-hr" onclick="app.execRunnerAction('SCORE_RBI')">
+                        🏠 計打點得分<small>${lastBatterLabel}</small>
+                    </button>
+                    <button class="touch-btn btn-sac" onclick="app.execRunnerAction('SCORE_NO_RBI')">
+                        🏠 不計打點得分<small>本壘得分 (+1 R，不計打點)</small>
                     </button>
                 </div>
                 <div style="margin-top:12px;text-align:right;">
@@ -1690,10 +1757,14 @@ class BaseballApp {
         } else {
             const teamPlayers = window.store.getPlayersByTeam(battingTeam.id);
             body.innerHTML = `
-                <p style="margin-bottom:10px;color:var(--text-secondary);font-size:0.88rem;">手動放置【${battingTeam.emoji}${battingTeam.name}】跑者上${baseTitleMap[baseKey]}（如突破僵局制或代跑）：</p>
-                <select id="manual-runner-select" class="form-control" style="margin-bottom:12px;">
+                <p style="margin-bottom:10px;color:var(--text-secondary);font-size:0.88rem;">手動放置【${battingTeam.emoji}${battingTeam.name}】跑者上${baseTitleMap[baseKey]}（如突破僵局制或補登跑者）：</p>
+                <select id="manual-runner-select" class="form-control" style="margin-bottom:10px;">
                     ${teamPlayers.map(p => `<option value="${p.id}">#${p.number} ${p.name}</option>`).join('')}
                 </select>
+                <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:0.82rem;color:#fde68a;cursor:pointer;">
+                    <input type="checkbox" id="manual-runner-unearned" checked style="width:17px;height:17px;accent-color:#f59e0b;">
+                    <span>☑️ 突破僵局制 / 非自責跑者（此跑者後續得分不計投手自責分 ER）</span>
+                </label>
                 <button class="btn btn-primary" onclick="app.placeManualRunner()">確認放置跑者</button>
             `;
         }
@@ -1703,7 +1774,14 @@ class BaseballApp {
 
     execRunnerAction(action) {
         if (!this.selectedBaseKey) return;
-        window.scorebook.handleRunnerAction(this.selectedBaseKey, action);
+        const catcherId = document.getElementById('runner-modal-catcher-select')?.value || '';
+        const cbEl = document.getElementById('runner-modal-unearned-cb');
+        const isUnearned = cbEl ? Boolean(cbEl.checked) : undefined;
+        const res = window.scorebook.handleRunnerAction(this.selectedBaseKey, action, { catcherId, isUnearned });
+        if (res && res.error === 'BLOCKED_BY_LEAD_RUNNER') {
+            alert(`⚠️ 前方${res.nextBaseLabel || '壘包'}目前已經有跑者！\n請先點擊前位跑者進行推進或得分後，再移動此壘跑者，避免紀錄互相覆蓋。`);
+            return;
+        }
         if (action !== 'REMOVE') {
             const latestLog = window.scorebook.state?.playByPlay?.[0]?.text;
             if (latestLog) this.speakActionText(latestLog);
@@ -1712,14 +1790,168 @@ class BaseballApp {
         this.renderScorebookView();
     }
 
+    openPinchSubModal(mode = 'PH', baseKey = '') {
+        const st = window.scorebook.state;
+        if (!st) {
+            alert('請先開始一場比賽！');
+            return;
+        }
+        const { isTop, battingTeam } = window.scorebook.getActiveTeams();
+        const lineup = isTop ? st.awayLineup : st.homeLineup;
+        const curBatterIdx = (isTop ? st.awayBatterIndex : st.homeBatterIndex) % Math.max(1, lineup.length);
+        const allTeamPlayers = window.store.getPlayersByTeam(battingTeam.id) || [];
+        const occupiedBases = ['first', 'second', 'third'].filter(k => Boolean(st.bases[k]));
+
+        if (mode === 'PR' && occupiedBases.length === 0) {
+            mode = 'PH';
+        }
+
+        const targetBase = (baseKey && st.bases[baseKey]) ? baseKey : (occupiedBases[0] || 'first');
+        const baseLabelMap = { first: '一壘', second: '二壘', third: '三壘' };
+
+        const modal = document.getElementById('runner-action-modal');
+        const title = document.getElementById('runner-modal-title');
+        const body = document.getElementById('runner-modal-body');
+        if (!modal || !title || !body) return;
+
+        title.textContent = `🔄 【${battingTeam.emoji}${battingTeam.name}】代打 / 代跑換人調度`;
+
+        const benchPlayers = allTeamPlayers.filter(p => !lineup.includes(p.id));
+        const otherPlayers = allTeamPlayers.filter(p => lineup.includes(p.id));
+        const canCustomSub = Boolean(st.isExternal || (battingTeam.id && battingTeam.id.startsWith('OPP')));
+
+        const candidateOptionsHTML = [
+            ...benchPlayers.map(p => `<option value="${p.id}">🟢 候補 #${p.number} ${p.name} (${p.pos || '選手'})</option>`),
+            ...otherPlayers.map(p => `<option value="${p.id}">⚠️ 已在名單 #${p.number} ${p.name}</option>`),
+            ...(canCustomSub ? [`<option value="__CUSTOM__">✏️ 手動輸入候補球員姓名與背號...</option>`] : [])
+        ].join('');
+
+        const modeTabsHTML = `
+            <div style="display:flex;gap:8px;margin-bottom:14px;">
+                <button type="button" class="btn ${mode === 'PH' ? 'btn-primary' : ''}" style="flex:1;justify-content:center;" onclick="app.openPinchSubModal('PH')">
+                    🏏 換代打 (替換棒次)
+                </button>
+                <button type="button" class="btn ${mode === 'PR' ? 'btn-primary' : ''}" style="flex:1;justify-content:center;${occupiedBases.length === 0 ? 'opacity:0.45;' : ''}" ${occupiedBases.length === 0 ? 'disabled title="目前壘上無人"' : ''} onclick="app.openPinchSubModal('PR')">
+                    👟 換代跑 (替換壘上跑者)
+                </button>
+            </div>
+        `;
+
+        const targetSlotHTML = mode === 'PH'
+            ? `
+                <div class="form-group" style="margin-bottom:12px;">
+                    <label>選擇要替換下場的棒次（預設為目前打者）：</label>
+                    <select id="pinch-lineup-idx" class="form-control">
+                        ${lineup.map((pid, idx) => {
+                            const p = window.store.getPlayer(pid);
+                            const bs = (st.battingStats || {})[pid];
+                            const statHint = bs ? `（今日 ${bs.ab || 0}-${bs.h || 0}）` : '';
+                            return `<option value="${idx}" ${idx === curBatterIdx ? 'selected' : ''}>第 ${idx + 1} 棒：#${p ? p.number : ''} ${p ? p.name : pid} ${statHint}${idx === curBatterIdx ? ' 🔥目前打者' : ''}</option>`;
+                        }).join('')}
+                    </select>
+                </div>
+            `
+            : `
+                <div class="form-group" style="margin-bottom:12px;">
+                    <label>選擇要更換代跑的壘包與原跑者（將自動同步替換該跑者在打序中的棒次）：</label>
+                    <select id="pinch-base-key" class="form-control">
+                        ${occupiedBases.map(bk => {
+                            const r = st.bases[bk];
+                            return `<option value="${bk}" ${bk === targetBase ? 'selected' : ''}>${baseLabelMap[bk]}跑者：#${r.number || ''} ${r.name}</option>`;
+                        }).join('')}
+                    </select>
+                </div>
+            `;
+
+        const customWrapDisplay = candidateOptionsHTML && benchPlayers.length === 0 && otherPlayers.length === 0 ? 'flex' : 'none';
+
+        body.innerHTML = `
+            ${modeTabsHTML}
+            ${targetSlotHTML}
+            <div class="form-group" style="margin-bottom:12px;">
+                <label>選擇上場的候補球員：</label>
+                <select id="pinch-candidate-select" class="form-control" onchange="const w=document.getElementById('pinch-custom-wrap');if(w)w.style.display=(this.value==='__CUSTOM__'?'flex':'none');">
+                    ${candidateOptionsHTML || '<option value="__CUSTOM__">✏️ 手動輸入候補球員姓名與背號...</option>'}
+                </select>
+            </div>
+            <div id="pinch-custom-wrap" style="display:${customWrapDisplay};gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+                <input type="text" id="pinch-custom-num" class="form-control" style="width:90px;" placeholder="背號">
+                <input type="text" id="pinch-custom-name" class="form-control" style="flex:1;min-width:140px;" placeholder="請輸入替補球員姓名">
+            </div>
+            <div style="background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.45);padding:10px 12px;border-radius:8px;font-size:0.8rem;color:#bae6fd;margin-bottom:14px;">
+                ✨ 換人後打序將直接替換為新上場球員，且<strong>原球員本場先前累積的所有安打、打點與統計紀錄會完整保留</strong>，不會被清除。
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:10px;">
+                <button type="button" class="btn" onclick="app.closeModal('runner-action-modal')">取消</button>
+                <button type="button" class="btn btn-primary" onclick="${mode === 'PH' ? 'app.confirmPinchHitter()' : 'app.confirmPinchRunner()'}">
+                    ✅ 確認${mode === 'PH' ? '代打' : '代跑'}上場
+                </button>
+            </div>
+        `;
+        modal.classList.add('open');
+    }
+
+    confirmPinchHitter() {
+        const idx = Number(document.getElementById('pinch-lineup-idx')?.value);
+        const candId = document.getElementById('pinch-candidate-select')?.value;
+        const customInfo = candId === '__CUSTOM__' ? {
+            number: document.getElementById('pinch-custom-num')?.value || '',
+            name: document.getElementById('pinch-custom-name')?.value || ''
+        } : null;
+
+        if (candId === '__CUSTOM__' && !customInfo.name.trim()) {
+            alert('請輸入代打球員姓名！');
+            return;
+        }
+        const sub = window.scorebook.substitutePinchHitter(idx, candId, customInfo);
+        if (!sub) {
+            alert('無法完成代打替換，請確認選擇的球員與棒次。');
+            return;
+        }
+        const latestLog = window.scorebook.state?.playByPlay?.[0]?.text;
+        if (latestLog) this.speakActionText(latestLog);
+        this.closeModal('runner-action-modal');
+        this.renderScorebookView();
+    }
+
+    confirmPinchRunner() {
+        const baseKey = document.getElementById('pinch-base-key')?.value;
+        const candId = document.getElementById('pinch-candidate-select')?.value;
+        const customInfo = candId === '__CUSTOM__' ? {
+            number: document.getElementById('pinch-custom-num')?.value || '',
+            name: document.getElementById('pinch-custom-name')?.value || ''
+        } : null;
+
+        if (candId === '__CUSTOM__' && !customInfo.name.trim()) {
+            alert('請輸入代跑球員姓名！');
+            return;
+        }
+        const sub = window.scorebook.substitutePinchRunner(baseKey, candId, customInfo);
+        if (!sub) {
+            alert('無法完成代跑替換，請確認壘上跑者與候補球員。');
+            return;
+        }
+        const latestLog = window.scorebook.state?.playByPlay?.[0]?.text;
+        if (latestLog) this.speakActionText(latestLog);
+        this.closeModal('runner-action-modal');
+        this.renderScorebookView();
+    }
+
     placeManualRunner() {
         const st = window.scorebook.state;
         if (!st || !this.selectedBaseKey) return;
         const pid = document.getElementById('manual-runner-select')?.value;
+        const isUnearned = Boolean(document.getElementById('manual-runner-unearned')?.checked);
         const p = window.store.getPlayer(pid);
         if (p) {
             window.scorebook.pushHistory();
-            st.bases[this.selectedBaseKey] = { playerId: p.id, teamId: p.teamId, name: p.name, number: p.number };
+            st.bases[this.selectedBaseKey] = {
+                playerId: p.id,
+                teamId: p.teamId,
+                name: p.name,
+                number: p.number,
+                isUnearned
+            };
             window.scorebook.saveLiveState();
         }
         this.closeModal('runner-action-modal');
@@ -1806,6 +2038,7 @@ class BaseballApp {
 
         body.innerHTML = `
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+                <button type="button" class="btn" style="border-color:#38bdf8;color:#7dd3fc;font-weight:800;" onclick="app.openPinchSubModal('PH')">🔄 代打 / 代跑 (保留原球員數據)</button>
                 <button type="button" class="btn" onclick="app.clearLiveLineupForTap()">👆 清空重排（依點擊順序決定 1~N 棒）</button>
                 <button type="button" class="btn" onclick="app.shuffleLiveLineup()">🎲 隨機洗牌重排打序</button>
             </div>
@@ -2895,7 +3128,8 @@ class BaseballApp {
                     </div>
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
                         <button class="btn" style="flex:1;justify-content:center;" onclick="app.openGameBoxScoreModal('${g.id}')">📊 查看 Box 計分表</button>
-                        <button class="btn" style="border-color:var(--jj-gold);color:var(--jj-gold-light);" onclick="app.openQuickBoxEntryModal('${g.id}')">✏️ 修改/補打數據</button>
+                        <button class="btn" style="border-color:#38bdf8;color:#7dd3fc;" onclick="app.openGameBoxScoreModal('${g.id}', true)">📢 文字轉播 (${(g.playByPlay || []).length})</button>
+                        <button class="btn" style="border-color:var(--jj-gold);color:var(--jj-gold-light);" onclick="app.openQuickBoxEntryModal('${g.id}')">✏️ 修改/補打</button>
                         <button class="btn btn-danger" onclick="app.deleteGame('${g.id}')">🗑️</button>
                     </div>
                 </div>
@@ -2903,7 +3137,7 @@ class BaseballApp {
         }).join('');
     }
 
-    openGameBoxScoreModal(gameId) {
+    openGameBoxScoreModal(gameId, focusPbp = false) {
         const g = (window.store.data.games || []).find(x => x.id === gameId);
         if (!g) return;
         const awayT = window.store.getTeam(g.awayTeamId, g.opponentName);
@@ -2916,7 +3150,7 @@ class BaseballApp {
         const title = document.getElementById('runner-modal-title');
         const body = document.getElementById('runner-modal-body');
 
-        title.textContent = `📊 單場計分表：${awayT.emoji}${awayT.name} vs ${homeT.emoji}${homeT.name} (${g.date})`;
+        title.textContent = `📊 單場計分表與文字轉播：${awayT.emoji}${awayT.name} vs ${homeT.emoji}${homeT.name} (${g.date})`;
 
         const batRows = (g.battingStats || []).filter(b => b.playerId !== 'opp_batter').map(b => {
             const p = window.store.getPlayer(b.playerId) || { name: '球員', number: '?', teamId: b.teamId };
@@ -2925,7 +3159,7 @@ class BaseballApp {
                 <td class="align-left">#${p.number} ${p.name}</td>
                 <td>${b.pa}</td><td>${b.ab}</td><td><strong>${b.h}</strong></td>
                 <td>${b.b2}</td><td>${b.b3}</td><td>${b.hr}</td>
-                <td><strong>${b.rbi}</strong></td><td>${b.r}</td><td>${b.bb}</td><td>${b.so}</td><td>${b.sb}</td>
+                <td><strong>${b.rbi}</strong></td><td>${b.r}</td><td>${b.bb}</td><td>${b.so}</td><td>${b.sb}</td><td>${b.ccs || 0}</td>
             </tr>`;
         }).join('');
 
@@ -2936,9 +3170,29 @@ class BaseballApp {
                 <td class="align-left">#${p.number} ${p.name} ${pt.decision ? `<span class="season-badge">${pt.decision}</span>` : ''}</td>
                 <td><strong>${StatsEngine.formatIP(pt.outs)}</strong></td>
                 <td>${pt.np}</td><td>${pt.h}</td><td>${pt.bb}</td><td><strong>${pt.so}</strong></td>
-                <td>${pt.wp || 0}</td><td>${pt.r}</td><td>${pt.er}</td>
+                <td>${pt.wp || 0}</td><td>${pt.pk || 0}</td><td>${pt.r}</td><td>${pt.er}</td>
             </tr>`;
         }).join('');
+
+        const pbpList = Array.isArray(g.playByPlay) ? g.playByPlay : [];
+        const pbpRowsHTML = pbpList.length > 0
+            ? pbpList.map((item, idx) => {
+                const snapParts = [
+                    item.score ? `比數 ${item.score}` : '',
+                    item.outs || '',
+                    item.bases || ''
+                ].filter(Boolean).join(' ｜ ');
+                return `
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:7px 10px;border-bottom:1px solid rgba(255,255,255,0.08);font-size:0.82rem;flex-wrap:wrap;">
+                        <div>
+                            <span style="color:var(--jj-gold-light);font-weight:800;margin-right:6px;">[${idx + 1}. ${item.inning || ''} ${item.time || ''}]</span>
+                            <span style="color:#fff;font-weight:700;">${item.text || ''}</span>
+                        </div>
+                        ${snapParts ? `<span style="color:#94a3b8;font-size:0.74rem;">${snapParts}</span>` : ''}
+                    </div>
+                `;
+            }).join('')
+            : '<div style="padding:14px;text-align:center;color:var(--text-secondary);font-size:0.84rem;">此場比賽無文字轉播紀錄（可能為賽後手動補打場次）。</div>';
 
         body.innerHTML = `
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
@@ -2954,9 +3208,9 @@ class BaseballApp {
                 <div class="table-scroll-wrapper">
                     <table class="cpbl-table">
                         <thead>
-                            <tr><th class="align-left">隊伍</th><th class="align-left">球員</th><th>PA</th><th>AB</th><th>H</th><th>2B</th><th>3B</th><th>HR</th><th>RBI</th><th>R</th><th>BB</th><th>SO</th><th>SB</th></tr>
+                            <tr><th class="align-left">隊伍</th><th class="align-left">球員</th><th>PA</th><th>AB</th><th>H</th><th>2B</th><th>3B</th><th>HR</th><th>RBI</th><th>R</th><th>BB</th><th>SO</th><th>SB</th><th>阻殺CCS</th></tr>
                         </thead>
-                        <tbody>${batRows || '<tr><td colspan="13">無打擊明細</td></tr>'}</tbody>
+                        <tbody>${batRows || '<tr><td colspan="14">無打擊明細</td></tr>'}</tbody>
                     </table>
                 </div>
             </div>
@@ -2965,14 +3219,29 @@ class BaseballApp {
                 <div class="table-scroll-wrapper">
                     <table class="cpbl-table">
                         <thead>
-                            <tr><th class="align-left">隊伍</th><th class="align-left">投手</th><th>IP</th><th>用球NP</th><th>被安H</th><th>四壞BB</th><th>三振SO</th><th>暴投WP</th><th>失分R</th><th>自責ER</th></tr>
+                            <tr><th class="align-left">隊伍</th><th class="align-left">投手</th><th>IP</th><th>用球NP</th><th>被安H</th><th>四壞BB</th><th>三振SO</th><th>暴投WP</th><th>牽制PK</th><th>失分R</th><th>自責ER</th></tr>
                         </thead>
-                        <tbody>${pitRows || '<tr><td colspan="10">無投球明細</td></tr>'}</tbody>
+                        <tbody>${pitRows || '<tr><td colspan="11">無投球明細</td></tr>'}</tbody>
                     </table>
+                </div>
+            </div>
+            <div id="box-modal-pbp-section" style="margin-top:14px;padding:12px;background:var(--bg-primary);border-radius:10px;border:1px solid rgba(56,189,248,0.4);">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+                    <h4 style="color:#7dd3fc;margin:0;">📢 本場完整文字轉播回顧 (共 ${pbpList.length} 筆｜按時間順序)</h4>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                        <button type="button" class="btn" style="padding:4px 10px;font-size:0.76rem;border-color:#38bdf8;color:#7dd3fc;" onclick="app.downloadGamesPlayByPlay(['${g.id}'], 'txt')">📄 下載轉播 (.txt 劇本版)</button>
+                        <button type="button" class="btn" style="padding:4px 10px;font-size:0.76rem;border-color:#34d399;color:#6ee7b7;" onclick="app.downloadGamesPlayByPlay(['${g.id}'], 'csv')">📊 下載轉播 (.csv Excel版)</button>
+                    </div>
+                </div>
+                <div style="max-height:240px;overflow-y:auto;background:rgba(6,21,39,0.75);border-radius:8px;border:1px solid var(--border-color);">
+                    ${pbpRowsHTML}
                 </div>
             </div>
         `;
         modal.classList.add('open');
+        if (focusPbp) {
+            setTimeout(() => document.getElementById('box-modal-pbp-section')?.scrollIntoView({ behavior: 'smooth' }), 60);
+        }
     }
 
     deleteGame(gameId) {
@@ -3380,6 +3649,14 @@ class BaseballApp {
             homeScore = Number(document.getElementById('qb-home-score')?.value) || 0;
         }
 
+        const prevGame = this._qbEditGameId ? (window.store.data.games || []).find(g => g.id === this._qbEditGameId) : null;
+        const prevBatMap = {};
+        const prevPitMap = {};
+        if (prevGame) {
+            (prevGame.battingStats || []).forEach(b => { if (b && b.playerId) prevBatMap[b.playerId] = b; });
+            (prevGame.pitchingStats || []).forEach(pt => { if (pt && pt.playerId) prevPitMap[pt.playerId] = pt; });
+        }
+
         const battingStats = [];
         const pitchingStats = [];
         let awayHits = 0, homeHits = 0, oppPitcherHitsAllowed = 0;
@@ -3388,15 +3665,17 @@ class BaseballApp {
             const p = window.store.getPlayer(pid);
             if (!p) return;
             const tid = isExt ? 'JJ' : p.teamId;
+            const prevB = prevBatMap[pid] || {};
+            const prevPt = prevPitMap[pid] || {};
 
             const h = (d.b1 || 0) + (d.b2 || 0) + (d.b3 || 0) + (d.hr || 0);
             const ab = Math.max(d.ab || 0, h + (d.so || 0));
-            const pa = ab + (d.bb || 0);
+            const pa = ab + (d.bb || 0) + (prevB.hbp || 0) + (prevB.sac || 0) + (prevB.sf || 0);
 
             if (tid === awayTeamId) awayHits += h;
             if (tid === homeTeamId) homeHits += h;
 
-            if (pa > 0 || (d.r || 0) > 0 || (d.sb || 0) > 0 || (d.rbi || 0) > 0) {
+            if (pa > 0 || (d.r || 0) > 0 || (d.sb || 0) > 0 || (d.rbi || 0) > 0 || (prevB.ccs || 0) > 0) {
                 battingStats.push({
                     playerId: pid,
                     teamId: tid,
@@ -3410,17 +3689,19 @@ class BaseballApp {
                     rbi: d.rbi || 0,
                     r: d.r || 0,
                     bb: d.bb || 0,
-                    hbp: 0,
+                    hbp: prevB.hbp || 0,
                     so: d.so || 0,
-                    sac: 0,
-                    sf: 0,
+                    sac: prevB.sac || 0,
+                    sf: prevB.sf || 0,
                     sb: d.sb || 0,
-                    cs: 0,
-                    roe: 0
+                    cs: prevB.cs || 0,
+                    roe: prevB.roe || 0,
+                    ccs: prevB.ccs || 0,
+                    fc: prevB.fc || 0
                 });
             }
 
-            if ((d.outs || 0) > 0 || (d.pso || 0) > 0 || (d.pwp || 0) > 0 || (d.er || 0) > 0 || (d.pr || 0) > 0 || (d.ph || 0) > 0 || (d.pbb || 0) > 0 || (d.np || 0) > 0 || d.dec) {
+            if ((d.outs || 0) > 0 || (d.pso || 0) > 0 || (d.pwp || 0) > 0 || (d.er || 0) > 0 || (d.pr || 0) > 0 || (d.ph || 0) > 0 || (d.pbb || 0) > 0 || (d.np || 0) > 0 || d.dec || (prevPt.pk || 0) > 0) {
                 const outs = d.outs || 0;
                 const np = d.np > 0 ? d.np : outs * 5;
                 const er = d.er || 0;
@@ -3429,17 +3710,18 @@ class BaseballApp {
                 pitchingStats.push({
                     playerId: pid,
                     teamId: tid,
-                    gs: 1,
+                    gs: prevPt.gs !== undefined ? prevPt.gs : 1,
                     outs,
                     np,
                     strikes: Math.round(np * 0.62),
                     bf: outs + (d.ph || 0) + (d.pbb || 0),
                     h: d.ph || 0,
-                    hr: 0,
+                    hr: prevPt.hr || 0,
                     bb: d.pbb || 0,
-                    hbp: 0,
+                    hbp: prevPt.hbp || 0,
                     so: d.pso || 0,
                     wp: d.pwp || 0,
+                    pk: prevPt.pk || 0,
                     r: pr,
                     er,
                     decision: d.dec || ''
@@ -3470,10 +3752,10 @@ class BaseballApp {
             rulingNote,
             awayHits,
             homeHits,
-            awayErrors: 0,
-            homeErrors: 0,
-            innings: isExt ? 6 : 4,
-            lineScore: { away: [awayScore], home: [homeScore] },
+            awayErrors: prevGame ? (prevGame.awayErrors || 0) : 0,
+            homeErrors: prevGame ? (prevGame.homeErrors || 0) : 0,
+            innings: prevGame ? (prevGame.innings || (isExt ? 6 : 4)) : (isExt ? 6 : 4),
+            lineScore: (prevGame && prevGame.lineScore) ? prevGame.lineScore : { away: [awayScore], home: [homeScore] },
             battingStats,
             pitchingStats,
             playByPlay: []
@@ -3795,11 +4077,11 @@ class BaseballApp {
             });
             return {
                 title,
-                headers: ['所屬隊伍', '背號', '姓名', '年級', '守位', '出賽G', '打席PA', '打數AB', '打擊率AVG', '安打H', '一安1B', '二安2B', '三安3B', '全壘打HR', '壘打數TB', '打點RBI', '得分R', '盜壘SB', '盜壘失敗CS', '四壞BB', '觸身HBP', '三振SO', '上壘率OBP', '長打率SLG', 'OPS'],
+                headers: ['所屬隊伍', '背號', '姓名', '年級', '守位', '出賽G', '打席PA', '打數AB', '打擊率AVG', '安打H', '一安1B', '二安2B', '三安3B', '全壘打HR', '壘打數TB', '打點RBI', '得分R', '盜壘SB', '盜壘失敗CS', '捕手阻殺CCS', '四壞BB', '觸身HBP', '三振SO', '上壘率OBP', '長打率SLG', 'OPS'],
                 rows: list.map(b => [
                     window.store.getTeam(b.teamId).name, String(b.number ?? ''), b.name, b.grade || '', b.pos || '',
                     b.g, b.pa, b.ab, StatsEngine.formatRate(b.avg),
-                    b.h, b.b1, b.b2, b.b3, b.hr, b.tb, b.rbi, b.r, b.sb, b.cs, b.bb, b.hbp, b.so,
+                    b.h, b.b1, b.b2, b.b3, b.hr, b.tb, b.rbi, b.r, b.sb, b.cs, b.ccs || 0, b.bb, b.hbp, b.so,
                     StatsEngine.formatRate(b.obp), StatsEngine.formatRate(b.slg), StatsEngine.formatRate(b.ops)
                 ])
             };
@@ -3815,13 +4097,13 @@ class BaseballApp {
             });
             return {
                 title,
-                headers: ['所屬隊伍', '背號', '姓名', '年級', '出賽G', '先發GS', '勝W', '敗L', '救援SV', '中繼HLD', '局數IP', '防禦率ERA(9局)', 'WHIP', '奪三振率K/9', '用球數NP', '好球數', '好球率%', '被安打H', '被全壘HR', '四壞BB', '觸身HBP', '奪三振SO', '暴投WP', '失分R', '自責分ER'],
+                headers: ['所屬隊伍', '背號', '姓名', '年級', '出賽G', '先發GS', '勝W', '敗L', '救援SV', '中繼HLD', '局數IP', '防禦率ERA(9局)', 'WHIP', '奪三振率K/9', '用球數NP', '好球數', '好球率%', '被安打H', '被全壘HR', '四壞BB', '觸身HBP', '奪三振SO', '暴投WP', '牽制PK', '失分R', '自責分ER'],
                 rows: list.map(pt => [
                     window.store.getTeam(pt.teamId).name, String(pt.number ?? ''), pt.name, pt.grade || '',
                     pt.g, pt.gs, pt.w, pt.l, pt.sv, pt.hld, pt.ipDisplay,
                     StatsEngine.formatERA(pt.era), StatsEngine.formatERA(pt.whip), StatsEngine.formatERA(pt.kRate),
                     pt.np, pt.strikes, `${pt.strikePct.toFixed(0)}%`,
-                    pt.h, pt.hr, pt.bb, pt.hbp, pt.so, pt.wp || 0, pt.r, pt.er
+                    pt.h, pt.hr, pt.bb, pt.hbp, pt.so, pt.wp || 0, pt.pk || 0, pt.r, pt.er
                 ])
             };
         };
@@ -3858,10 +4140,10 @@ class BaseballApp {
                     info.team, info.number, info.name,
                     b ? (b.pa || 0) : 0, b ? (b.ab || 0) : 0, b ? (b.h || 0) : 0,
                     b ? (b.b2 || 0) : 0, b ? (b.b3 || 0) : 0, b ? (b.hr || 0) : 0,
-                    b ? (b.rbi || 0) : 0, b ? (b.r || 0) : 0, b ? (b.bb || 0) : 0, b ? (b.so || 0) : 0, b ? (b.sb || 0) : 0,
+                    b ? (b.rbi || 0) : 0, b ? (b.r || 0) : 0, b ? (b.bb || 0) : 0, b ? (b.so || 0) : 0, b ? (b.sb || 0) : 0, b ? (b.ccs || 0) : 0,
                     pt ? StatsEngine.formatIP(pt.outs || 0) : '0.0',
                     pt ? (pt.np || 0) : 0, pt ? (pt.h || 0) : 0, pt ? (pt.bb || 0) : 0,
-                    pt ? (pt.so || 0) : 0, pt ? (pt.wp || 0) : 0, pt ? (pt.r || 0) : 0, pt ? (pt.er || 0) : 0,
+                    pt ? (pt.so || 0) : 0, pt ? (pt.wp || 0) : 0, pt ? (pt.pk || 0) : 0, pt ? (pt.r || 0) : 0, pt ? (pt.er || 0) : 0,
                     pt ? (pt.decision || '') : ''
                 ]);
             });
@@ -3869,8 +4151,29 @@ class BaseballApp {
 
         const boxDetailsTable = {
             title: '【七、📋 全部歷史比賽 逐場選手單場投打明細 (Box Score)】',
-            headers: ['日期', '賽事分類', '盃賽/賽事名稱', '對戰比數', '所屬隊伍', '背號', '球員', 'PA', 'AB', 'H', '2B', '3B', 'HR', 'RBI', 'R', 'BB', 'SO', 'SB', '投球IP', '用球NP', '被安H', '投四壞BB', '奪三振SO', '暴投WP', '失分R', '自責ER', '勝敗救援'],
+            headers: ['日期', '賽事分類', '盃賽/賽事名稱', '對戰比數', '所屬隊伍', '背號', '球員', 'PA', 'AB', 'H', '2B', '3B', 'HR', 'RBI', 'R', 'BB', 'SO', 'SB', '阻殺CCS', '投球IP', '用球NP', '被安H', '投四壞BB', '奪三振SO', '暴投WP', '牽制PK', '失分R', '自責ER', '勝敗救援'],
             rows: boxRows
+        };
+
+        const pbpRows = [];
+        (data.games || []).forEach(g => {
+            const awayT = window.store.getTeam(g.awayTeamId, g.opponentName);
+            const homeT = window.store.getTeam(g.homeTeamId, g.opponentName);
+            const matchLabel = `${awayT.name} ${g.awayScore}:${g.homeScore} ${homeT.name}`;
+            const typeLabel = g.isExternal ? '🌏對外賽' : '🏟️隊內賽';
+            (g.playByPlay || []).forEach((item, idx) => {
+                pbpRows.push([
+                    g.date || '', typeLabel, g.tournament || '', matchLabel,
+                    idx + 1, item.inning || '', item.time || '',
+                    item.score || '', item.outs || '', item.bases || '', item.text || ''
+                ]);
+            });
+        });
+
+        const playByPlayTable = {
+            title: '【八、📢 全部歷史比賽 逐場文字轉播紀錄 (Play-by-Play)】',
+            headers: ['比賽日期', '賽事分類', '盃賽/賽事名稱', '終場比數', '序號', '局數', '時間', '當時比數', '出局數', '當時壘包狀態', '轉播文字內容'],
+            rows: pbpRows
         };
 
         return {
@@ -3883,7 +4186,8 @@ class BaseballApp {
             extPitTable,
             intraBatTable,
             intraPitTable,
-            boxDetailsTable
+            boxDetailsTable,
+            playByPlayTable
         };
     }
 
@@ -3913,7 +4217,8 @@ class BaseballApp {
             ds.intraGamesTable,
             ds.intraBatTable,
             ds.intraPitTable,
-            ds.boxDetailsTable
+            ds.boxDetailsTable,
+            ds.playByPlayTable
         ].forEach(pushTable);
 
         return {
@@ -3991,6 +4296,7 @@ ${makeSheet('對外賽_投手統計', [ds.extPitTable])}
 ${makeSheet('隊內賽_打擊統計', [ds.intraBatTable])}
 ${makeSheet('隊內賽_投手統計', [ds.intraPitTable])}
 ${makeSheet('逐場選手Box明細', [ds.boxDetailsTable])}
+${makeSheet('逐場文字轉播紀錄', [ds.playByPlayTable])}
 </Workbook>`;
 
         return { dateStr: ds.dateStr, xml };
@@ -4003,6 +4309,239 @@ ${makeSheet('逐場選手Box明細', [ds.boxDetailsTable])}
             `中正少棒_隊內與對外分頁總檔_${dateStr}.xls`,
             'application/vnd.ms-excel;charset=utf-8;'
         );
+    }
+
+    getAllExportableGamesForPbp() {
+        const list = [];
+        const liveChs = [
+            { key: '__LIVE_EXTERNAL__', st: window.scorebook?.channels?.external },
+            { key: '__LIVE_INTRA__', st: window.scorebook?.channels?.intra }
+        ];
+        liveChs.forEach(({ key, st }) => {
+            if (!st) return;
+            const norm = window.scorebook.normalizeState(JSON.parse(JSON.stringify(st)));
+            list.push({
+                id: key,
+                _isLive: true,
+                date: norm.date || new Date().toISOString().slice(0, 10),
+                tournament: `[進行中] ${norm.tournament || '實戰計分'}`,
+                isExternal: Boolean(norm.isExternal),
+                opponentName: norm.opponentName || '',
+                awayTeamId: norm.awayTeamId,
+                homeTeamId: norm.homeTeamId,
+                awayScore: Number(norm.awayScore) || 0,
+                homeScore: Number(norm.homeScore) || 0,
+                battingStats: Object.values(norm.battingStats || {}),
+                pitchingStats: Object.values(norm.pitchingStats || {}),
+                playByPlay: Array.isArray(norm.playByPlay) ? norm.playByPlay.slice().reverse() : []
+            });
+        });
+        (window.store.data.games || []).forEach(g => list.push(g));
+        return list;
+    }
+
+    downloadLivePlayByPlay() {
+        const ch = window.scorebook?.activeChannel || 'intra';
+        const key = ch === 'external' ? '__LIVE_EXTERNAL__' : '__LIVE_INTRA__';
+        if (!window.scorebook?.state) {
+            alert('目前沒有正在進行中的比賽文字轉播！');
+            return;
+        }
+        this.downloadGamesPlayByPlay([key], 'txt');
+    }
+
+    openPlayByPlayDownloadModal() {
+        const games = this.getAllExportableGamesForPbp();
+        const modal = document.getElementById('runner-action-modal');
+        const title = document.getElementById('runner-modal-title');
+        const body = document.getElementById('runner-modal-body');
+        if (!modal || !title || !body) return;
+
+        title.textContent = '📢 挑選場次下載文字轉播紀錄 (Play-by-Play)';
+
+        if (games.length === 0) {
+            body.innerHTML = `<p style="padding:20px;text-align:center;color:var(--text-secondary);">目前尚無比賽或文字轉播紀錄。</p>`;
+            modal.classList.add('open');
+            return;
+        }
+
+        const gameRowsHTML = games.map(g => {
+            const awayT = window.store.getTeam(g.awayTeamId, g.opponentName);
+            const homeT = window.store.getTeam(g.homeTeamId, g.opponentName);
+            const pbpCount = (g.playByPlay || []).length;
+            const rbiList = (g.battingStats || [])
+                .filter(b => b && b.playerId !== 'opp_batter' && (b.rbi || 0) > 0)
+                .map(b => {
+                    const p = window.store.getPlayer(b.playerId);
+                    return `${p ? p.name : b.playerId} ${b.rbi}分`;
+                });
+            const rbiHint = rbiList.length > 0 ? `打點：${rbiList.join('、')}` : '無打點紀錄';
+            const typeTag = g.isExternal ? '🌏 對外賽' : '🏟️ 隊內賽';
+
+            return `
+                <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:var(--bg-primary);border-radius:10px;border:1px solid ${g._isLive ? '#38bdf8' : 'var(--border-color)'};cursor:pointer;margin-bottom:8px;">
+                    <input type="checkbox" class="pbp-game-checkbox" value="${g.id}" data-ext="${g.isExternal ? '1' : '0'}" checked style="width:18px;height:18px;margin-top:2px;accent-color:#38bdf8;">
+                    <div style="flex:1;min-width:200px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
+                            <strong style="color:#fff;font-size:0.92rem;">${typeTag} ｜ 📅 ${g.date} ｜ ${g.tournament}</strong>
+                            <span class="season-badge" style="color:${pbpCount > 0 ? '#7dd3fc' : '#94a3b8'};border-color:${pbpCount > 0 ? '#38bdf8' : 'var(--border-color)'};">轉播 ${pbpCount} 筆</span>
+                        </div>
+                        <div style="font-size:0.84rem;color:var(--jj-gold-light);margin-top:3px;font-weight:800;">
+                            ${awayT.emoji}${awayT.name} ${g.awayScore} : ${g.homeScore} ${homeT.emoji}${homeT.name}
+                        </div>
+                        <div style="font-size:0.75rem;color:var(--text-secondary);margin-top:2px;">
+                            ${rbiHint}
+                        </div>
+                    </div>
+                </label>
+            `;
+        }).join('');
+
+        body.innerHTML = `
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+                <button type="button" class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="app.selectPbpGamesFilter('ALL')">☑️ 全選</button>
+                <button type="button" class="btn" style="padding:4px 10px;font-size:0.78rem;border-color:#34d399;color:#6ee7b7;" onclick="app.selectPbpGamesFilter('EXT')">🌏 僅選對外賽</button>
+                <button type="button" class="btn" style="padding:4px 10px;font-size:0.78rem;border-color:var(--jj-gold);color:var(--jj-gold-light);" onclick="app.selectPbpGamesFilter('INTRA')">🏟️ 僅選隊內賽</button>
+                <button type="button" class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="app.selectPbpGamesFilter('NONE')">⬜ 全部取消</button>
+            </div>
+            <div style="max-height:360px;overflow-y:auto;margin-bottom:14px;">
+                ${gameRowsHTML}
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;">
+                <button type="button" class="btn" onclick="app.closeModal('runner-action-modal')">取消</button>
+                <button type="button" class="btn" style="border-color:#38bdf8;color:#7dd3fc;font-weight:800;" onclick="app.confirmDownloadSelectedPlayByPlay('txt')">
+                    📄 下載文字轉播劇本 (.txt)
+                </button>
+                <button type="button" class="btn btn-primary" onclick="app.confirmDownloadSelectedPlayByPlay('csv')">
+                    📊 下載文字轉播表格 (.csv Excel)
+                </button>
+            </div>
+        `;
+        modal.classList.add('open');
+    }
+
+    selectPbpGamesFilter(mode) {
+        document.querySelectorAll('.pbp-game-checkbox').forEach(cb => {
+            const isExt = cb.getAttribute('data-ext') === '1';
+            if (mode === 'ALL') cb.checked = true;
+            else if (mode === 'EXT') cb.checked = isExt;
+            else if (mode === 'INTRA') cb.checked = !isExt;
+            else cb.checked = false;
+        });
+    }
+
+    confirmDownloadSelectedPlayByPlay(format = 'txt') {
+        const selectedIds = Array.from(document.querySelectorAll('.pbp-game-checkbox:checked')).map(cb => cb.value);
+        if (selectedIds.length === 0) {
+            alert('請至少勾選 1 場比賽！');
+            return;
+        }
+        this.downloadGamesPlayByPlay(selectedIds, format);
+    }
+
+    formatGamesPlayByPlayText(gameIds) {
+        const allGames = this.getAllExportableGamesForPbp();
+        const picked = gameIds.map(id => allGames.find(g => g.id === id)).filter(Boolean);
+        const sections = [];
+
+        picked.forEach((g, idx) => {
+            const awayT = window.store.getTeam(g.awayTeamId, g.opponentName);
+            const homeT = window.store.getTeam(g.homeTeamId, g.opponentName);
+            const outcome = StatsEngine.getGameOutcome(g);
+            const winLabel = outcome.winner === 'away' ? `${awayT.name} 勝` : (outcome.winner === 'home' ? `${homeT.name} 勝` : '平手');
+            const rulingText = outcome.isRuling ? `（⚖️ 紀錄組裁定：${winLabel}${outcome.rulingNote ? '，' + outcome.rulingNote : ''}）` : `（${winLabel}）`;
+
+            const lines = [];
+            lines.push(`============================================================`);
+            lines.push(`【第 ${idx + 1} 場】${g.isExternal ? '🌏 對外比賽' : '🏟️ 隊內三隊賽'} ｜ ${g.date} ｜ ${g.tournament}`);
+            lines.push(`對戰：${awayT.name} (客) ${g.awayScore} : ${g.homeScore} ${homeT.name} (主) ${rulingText}`);
+
+            const rbiPlayers = (g.battingStats || [])
+                .filter(b => b && b.playerId !== 'opp_batter' && ((b.rbi || 0) > 0 || (b.r || 0) > 0 || (b.h || 0) > 0))
+                .map(b => {
+                    const p = window.store.getPlayer(b.playerId);
+                    return `#${p ? p.number : ''} ${p ? p.name : b.playerId} (${b.ab || 0}打數${b.h || 0}安打, ${b.rbi || 0}打點, ${b.r || 0}得分)`;
+                });
+            if (rbiPlayers.length > 0) {
+                lines.push(`打擊與打點摘要：${rbiPlayers.join(' ／ ')}`);
+            }
+            lines.push(`------------------------------------------------------------`);
+
+            const pbp = Array.isArray(g.playByPlay) ? g.playByPlay : [];
+            if (pbp.length === 0) {
+                lines.push('（此場比賽無文字轉播紀錄）');
+            } else {
+                let lastInn = '';
+                pbp.forEach((item, stepIdx) => {
+                    const inn = item.inning || '';
+                    if (inn && inn !== lastInn) {
+                        lines.push(`\n--- ${inn} ---`);
+                        lastInn = inn;
+                    }
+                    const snap = [
+                        item.score ? `比數 ${item.score}` : '',
+                        item.outs || '',
+                        item.bases || ''
+                    ].filter(Boolean).join(' | ');
+                    lines.push(`${String(stepIdx + 1).padStart(2, '0')}. [${item.time || '--:--'}] ${item.text || ''}${snap ? `  <${snap}>` : ''}`);
+                });
+            }
+            lines.push('');
+            sections.push(lines.join('\r\n'));
+        });
+
+        return {
+            picked,
+            content: sections.join('\r\n')
+        };
+    }
+
+    formatGamesPlayByPlayCSV(gameIds) {
+        const allGames = this.getAllExportableGamesForPbp();
+        const picked = gameIds.map(id => allGames.find(g => g.id === id)).filter(Boolean);
+        const esc = (x) => `"${String(x ?? '').replace(/"/g, '""')}"`;
+        const headers = ['比賽日期', '賽事分類', '盃賽/賽事名稱', '對戰比數', '序號', '局數', '時間', '當時比數', '出局數', '當時壘包狀態', '文字轉播內容'];
+        const rows = [headers.map(esc).join(',')];
+
+        picked.forEach(g => {
+            const awayT = window.store.getTeam(g.awayTeamId, g.opponentName);
+            const homeT = window.store.getTeam(g.homeTeamId, g.opponentName);
+            const matchLabel = `${awayT.name} ${g.awayScore}:${g.homeScore} ${homeT.name}`;
+            const typeLabel = g.isExternal ? '對外賽' : '隊內賽';
+            const pbp = Array.isArray(g.playByPlay) ? g.playByPlay : [];
+            if (pbp.length === 0) {
+                rows.push([g.date || '', typeLabel, g.tournament || '', matchLabel, 0, '', '', '', '', '', '(無文字轉播紀錄)'].map(esc).join(','));
+            } else {
+                pbp.forEach((item, idx) => {
+                    rows.push([
+                        g.date || '', typeLabel, g.tournament || '', matchLabel,
+                        idx + 1, item.inning || '', item.time || '',
+                        item.score || '', item.outs || '', item.bases || '', item.text || ''
+                    ].map(esc).join(','));
+                });
+            }
+        });
+
+        return {
+            picked,
+            content: '\uFEFF' + rows.join('\r\n')
+        };
+    }
+
+    downloadGamesPlayByPlay(gameIds, format = 'txt') {
+        const ids = Array.isArray(gameIds) ? gameIds : [gameIds];
+        const dateStr = new Date().toISOString().slice(0, 10);
+        if (format === 'csv') {
+            const { picked, content } = this.formatGamesPlayByPlayCSV(ids);
+            if (picked.length === 0) return;
+            const singleTag = picked.length === 1 ? `${picked[0].date}_${picked[0].tournament}` : `共${picked.length}場_${dateStr}`;
+            this.triggerFileDownload(content, `中正少棒_文字轉播_${singleTag}.csv`.replace(/[\\/:*?"<>|]/g, '_'), 'text/csv;charset=utf-8;');
+        } else {
+            const { picked, content } = this.formatGamesPlayByPlayText(ids);
+            if (picked.length === 0) return;
+            const singleTag = picked.length === 1 ? `${picked[0].date}_${picked[0].tournament}` : `共${picked.length}場_${dateStr}`;
+            this.triggerFileDownload(content, `中正少棒_文字轉播劇本_${singleTag}.txt`.replace(/[\\/:*?"<>|]/g, '_'), 'text/plain;charset=utf-8;');
+        }
     }
 
     // ==========================================
