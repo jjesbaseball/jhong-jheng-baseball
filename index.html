@@ -96,6 +96,11 @@
                 </div>
             </div>
 
+            <!-- 上方排行榜入榜門檻說明列 -->
+            <div id="toplist-qualify-hint" style="margin:-4px 0 14px 0;padding:8px 14px;background:rgba(203,176,99,0.12);border:1px solid rgba(203,176,99,0.45);border-radius:10px;font-size:0.84rem;color:var(--jj-gold-light);font-weight:700;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                <span>📌 打擊排行榜需滿 <strong>20 打席 (PA) 以上</strong> 方能登入排行榜；下方成績總表照常統計所有球員數據。</span>
+            </div>
+
             <!-- CPBL 風格 TOP 5 榮譽卡片網格 -->
             <div id="toplist-podium-grid" class="toplist-grid"></div>
 
@@ -106,7 +111,7 @@
                     <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
                         <label style="display:flex;align-items:center;gap:6px;font-size:0.86rem;cursor:pointer;color:var(--text-secondary);">
                             <input type="checkbox" onchange="app.toggleQualifyFilter(this.checked)" style="width:16px;height:16px;">
-                            僅顯示達規定打席/局數門檻
+                            僅顯示達規定門檻 (20打席 / 2局)
                         </label>
                         <input type="search" class="search-input" placeholder="🔍 搜尋球員姓名、背號或隊伍..." oninput="app.setSearchQuery(this.value)">
                     </div>

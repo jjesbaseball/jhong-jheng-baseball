@@ -292,29 +292,41 @@ class BaseballApp {
         if (!grid) return;
 
         const data = window.store.data;
+        const hintEl = document.getElementById('toplist-qualify-hint');
+        const isExt = this.dataMode === 'external';
+        const MIN_BATTING_PA = isExt ? 0 : 20;
 
         if (this.statsCategory === 'batting') {
+            if (hintEl) {
+                hintEl.innerHTML = isExt
+                    ? `<span>🌏 <strong>對外比賽打擊排行榜：</strong>不設打席門檻限制（有出賽紀錄即可入榜）；下方打擊成績總表照常統計並顯示所有球員數據。</span>`
+                    : `<span>📌 <strong>隊內賽打擊排行榜門檻：</strong>需滿 <strong>${MIN_BATTING_PA} 打席 (PA) 以上</strong> 方能登入排行榜；下方打擊成績總表照常統計並顯示所有球員數據。</span>`;
+            }
             const allList = StatsEngine.getBattingStatsList(data, this.teamFilter, this.dataMode);
             const activeList = allList.filter(p => p.pa > 0 || p.sb > 0 || p.r > 0 || p.rbi > 0);
+            const minPAFilter = p => isExt ? ((p.pa || 0) >= 1) : ((p.pa || 0) >= MIN_BATTING_PA);
             const categories = [
-                { title: '打擊率', code: 'AVG', key: 'avg', fmt: v => StatsEngine.formatRate(v), filter: p => p.ab >= 1, desc: true },
-                { title: '安打', code: 'H', key: 'h', fmt: v => `${v}`, filter: p => p.pa >= 1, desc: true },
-                { title: '全壘打', code: 'HR', key: 'hr', fmt: v => `${v}`, filter: p => p.pa >= 1, desc: true },
-                { title: '打點', code: 'RBI', key: 'rbi', fmt: v => `${v}`, filter: p => p.pa >= 1, desc: true },
-                { title: '盜壘成功', code: 'SB', key: 'sb', fmt: v => `${v}`, filter: p => (p.pa >= 1 || p.sb >= 1), desc: true },
-                { title: '整體攻擊指數', code: 'OPS', key: 'ops', fmt: v => StatsEngine.formatRate(v), filter: p => p.pa >= 1, desc: true }
+                { title: '打擊率', code: 'AVG', key: 'avg', isBatting: true, minPA: MIN_BATTING_PA, fmt: v => StatsEngine.formatRate(v), filter: p => minPAFilter(p) && (p.ab || 0) >= 1, desc: true },
+                { title: '安打', code: 'H', key: 'h', isBatting: true, minPA: MIN_BATTING_PA, fmt: v => `${v}`, filter: minPAFilter, desc: true },
+                { title: '全壘打', code: 'HR', key: 'hr', isBatting: true, minPA: MIN_BATTING_PA, fmt: v => `${v}`, filter: minPAFilter, desc: true },
+                { title: '打點', code: 'RBI', key: 'rbi', isBatting: true, minPA: MIN_BATTING_PA, fmt: v => `${v}`, filter: minPAFilter, desc: true },
+                { title: '盜壘成功', code: 'SB', key: 'sb', isBatting: true, minPA: MIN_BATTING_PA, fmt: v => `${v}`, filter: p => isExt ? ((p.pa || 0) >= 1 || (p.sb || 0) >= 1) : ((p.pa || 0) >= MIN_BATTING_PA), desc: true },
+                { title: '整體攻擊指數', code: 'OPS', key: 'ops', isBatting: true, minPA: MIN_BATTING_PA, fmt: v => StatsEngine.formatRate(v), filter: minPAFilter, desc: true }
             ];
             grid.innerHTML = categories.map((cat, idx) => this.buildPodiumCardHTML(activeList, cat, allList, idx)).join('');
         } else {
+            if (hintEl) {
+                hintEl.innerHTML = `<span>⚾ <strong>投手排行榜說明：</strong>依實戰投球紀錄列入排行榜；下方投手成績總表照常統計並顯示所有球員數據。</span>`;
+            }
             const allList = StatsEngine.getPitchingStatsList(data, this.teamFilter, this.dataMode);
             const activeList = allList.filter(p => p.outs > 0 || p.g > 0 || p.wp > 0);
             const categories = [
-                { title: '防禦率', code: 'ERA', key: 'era', fmt: v => StatsEngine.formatERA(v), filter: p => p.outs >= 1, desc: false },
-                { title: '勝投', code: 'W', key: 'w', fmt: v => `${v}`, filter: p => p.g >= 1, desc: true },
-                { title: '奪三振', code: 'SO', key: 'so', fmt: v => `${v}`, filter: p => p.outs >= 1 || p.so >= 1, desc: true },
-                { title: '救援成功', code: 'SV', key: 'sv', fmt: v => `${v}`, filter: p => p.g >= 1, desc: true },
-                { title: '每局被上壘率', code: 'WHIP', key: 'whip', fmt: v => StatsEngine.formatERA(v), filter: p => p.outs >= 1, desc: false },
-                { title: '奪三振率', code: 'K/9', key: 'kRate', fmt: v => StatsEngine.formatERA(v), filter: p => p.outs >= 1, desc: true }
+                { title: '防禦率', code: 'ERA', key: 'era', isBatting: false, fmt: v => StatsEngine.formatERA(v), filter: p => p.outs >= 1, desc: false },
+                { title: '勝投', code: 'W', key: 'w', isBatting: false, fmt: v => `${v}`, filter: p => p.g >= 1, desc: true },
+                { title: '奪三振', code: 'SO', key: 'so', isBatting: false, fmt: v => `${v}`, filter: p => p.outs >= 1 || p.so >= 1, desc: true },
+                { title: '救援成功', code: 'SV', key: 'sv', isBatting: false, fmt: v => `${v}`, filter: p => p.g >= 1, desc: true },
+                { title: '每局被上壘率', code: 'WHIP', key: 'whip', isBatting: false, fmt: v => StatsEngine.formatERA(v), filter: p => p.outs >= 1, desc: false },
+                { title: '奪三振率', code: 'K/9', key: 'kRate', isBatting: false, fmt: v => StatsEngine.formatERA(v), filter: p => p.outs >= 1, desc: true }
             ];
             grid.innerHTML = categories.map((cat, idx) => this.buildPodiumCardHTML(activeList, cat, allList, idx)).join('');
         }
@@ -364,39 +376,53 @@ class BaseballApp {
     }
 
     buildPodiumCardHTML(list, cat, fallbackList = [], catIdx = 0) {
-        let filtered = list.filter(cat.filter).sort((a, b) => {
+        const isBat = cat.isBatting !== undefined ? cat.isBatting : (this.statsCategory === 'batting');
+        const minPA = Number(cat.minPA) || 0;
+        const hasMinPA = isBat && minPA > 1;
+
+        const filtered = list.filter(cat.filter).sort((a, b) => {
             if (b[cat.key] === a[cat.key]) {
-                return (b.h || b.so || 0) - (a.h || a.so || 0);
+                if (isBat) {
+                    if (cat.key === 'avg' || cat.key === 'ops') {
+                        return (b.pa - a.pa) || (b.h - a.h);
+                    }
+                    return (b.avg - a.avg) || (b.pa - a.pa);
+                }
+                return (b.outs - a.outs) || (b.so - a.so);
             }
             return cat.desc ? (b[cat.key] - a[cat.key]) : (a[cat.key] - b[cat.key]);
         });
 
-        // 若該項目尚無完賽合格球員，取名單前 5 位選手展示 CPBL 排行榜照片卡片版型
-        if (filtered.length < 5 && fallbackList.length > 0) {
-            const existingIds = new Set(filtered.map(x => x.playerId));
-            const offset = (catIdx * 3) % Math.max(1, fallbackList.length);
-            const rotated = [...fallbackList.slice(offset), ...fallbackList.slice(0, offset)];
-            for (const item of rotated) {
-                if (!existingIds.has(item.playerId)) {
-                    filtered.push(item);
-                    existingIds.add(item.playerId);
-                }
-                if (filtered.length >= 5) break;
-            }
-        }
-
         const top5 = filtered.slice(0, 5);
         if (top5.length === 0) {
+            let emptyDetailHTML = `<div style="color:var(--text-secondary);">尚無符合資格數據，請至下方成績總表查看全隊明細。</div>`;
+            if (hasMinPA) {
+                const closest = [...list]
+                    .filter(p => (p.pa || 0) > 0)
+                    .sort((a, b) => (b.pa - a.pa) || (b.h - a.h))
+                    .slice(0, 3);
+                const closestText = closest.length > 0
+                    ? closest.map(p => `#${p.number} ${p.name} (${p.pa}/${minPA}打席)`).join('、')
+                    : '目前尚無出賽紀錄';
+                emptyDetailHTML = `
+                    <div style="color:var(--jj-gold-light);font-weight:800;margin-bottom:6px;">🔒 尚無球員達 ${minPA} 打席以上入榜門檻</div>
+                    <div style="font-size:0.78rem;color:#cbd5e1;margin-bottom:6px;">目前最高打席：${closestText}</div>
+                    <div style="font-size:0.74rem;color:#94a3b8;">👇 下方打擊成績總表仍照常統計並顯示所有球員</div>
+                `;
+            }
             return `
                 <div class="toplist-card">
                     <div class="cpbl-podium-header">
                         <div class="cpbl-podium-title-group">
                             <span class="cpbl-podium-title">${cat.title}</span>
-                            <span class="cpbl-podium-code">${cat.code}</span>
+                            <span class="cpbl-podium-code">${cat.code}${hasMinPA ? ` · ≥${minPA}PA` : ''}</span>
                         </div>
+                        <span class="cpbl-podium-more" onclick="app.sortTableBy('${cat.key}');document.getElementById('cpbl-stats-thead')?.scrollIntoView({behavior:'smooth'});">
+                            看總表 <span class="arrow-circle">&gt;</span>
+                        </span>
                     </div>
-                    <div style="padding:24px;text-align:center;color:var(--text-secondary);font-size:0.88rem;">
-                        尚無符合資格數據
+                    <div style="padding:20px 16px;text-align:center;font-size:0.86rem;line-height:1.55;">
+                        ${emptyDetailHTML}
                     </div>
                 </div>
             `;
@@ -405,13 +431,16 @@ class BaseballApp {
         const first = top5[0];
         const photoSrc = this.getPlayerPhotoSrc(first);
         const fallbackUri = this.getFallbackAvatarDataUri(first);
+        const partialNotice = (hasMinPA && filtered.length < 5)
+            ? `<div style="margin-top:6px;padding-top:5px;border-top:1px dashed rgba(203,176,99,0.28);font-size:0.72rem;color:#94a3b8;">※ 目前共 ${filtered.length} 人滿 ${minPA} 打席（未滿者請看下方總表）</div>`
+            : '';
 
         return `
             <div class="toplist-card">
                 <div class="cpbl-podium-header">
                     <div class="cpbl-podium-title-group">
                         <span class="cpbl-podium-title">${cat.title}</span>
-                        <span class="cpbl-podium-code">${cat.code}</span>
+                        <span class="cpbl-podium-code">${cat.code}${hasMinPA ? ` · ≥${minPA}PA` : ''}</span>
                     </div>
                     <span class="cpbl-podium-more" onclick="app.sortTableBy('${cat.key}');document.getElementById('cpbl-stats-thead')?.scrollIntoView({behavior:'smooth'});">
                         更多資訊 <span class="arrow-circle">&gt;</span>
@@ -426,11 +455,12 @@ class BaseballApp {
                         ${top5.map((r, idx) => `
                             <div class="cpbl-rank-row ${idx === 0 ? 'rank-1' : ''}" onclick="app.openPlayerModal('${r.playerId}')">
                                 <span class="cpbl-rank-badge ${idx === 0 ? 'r1' : 'r-other'}">${idx + 1}</span>
-                                <span class="cpbl-player-label">${r.name}<span class="team-paren">(${r.teamName})</span></span>
+                                <span class="cpbl-player-label">${r.name}<span class="team-paren">(${r.teamName}·${isBat ? `${r.pa}打席` : `${StatsEngine.formatIP(r.outs)}局`})</span></span>
                                 <span class="cpbl-connect-line"></span>
                                 <span class="cpbl-stat-num">${cat.fmt(r[cat.key])}</span>
                             </div>
                         `).join('')}
+                        ${partialNotice}
                     </div>
                 </div>
             </div>
@@ -466,10 +496,11 @@ class BaseballApp {
         const modePrefix = this.dataMode === 'external' ? '🌏 【對外比賽】' : '🏟️ 【隊內三隊聯賽】';
 
         if (this.statsCategory === 'batting') {
-            if (titleEl) titleEl.textContent = `📋 ${modePrefix}打擊成績總表（點擊欄位標題可排序，點擊球員可看個人明細）`;
+            if (titleEl) titleEl.textContent = `📋 ${modePrefix}打擊成績總表（完整統計全部球員，點擊欄位標題可排序）`;
             let rows = StatsEngine.getBattingStatsList(data, this.teamFilter, this.dataMode);
             if (this.qualifyOnly) {
-                rows = rows.filter(r => r.pa >= 3);
+                const minTablePA = this.dataMode === 'external' ? 1 : 20;
+                rows = rows.filter(r => r.pa >= minTablePA);
             }
             if (this.searchQuery) {
                 rows = rows.filter(r =>
